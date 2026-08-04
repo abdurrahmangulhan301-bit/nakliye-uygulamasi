@@ -65,7 +65,6 @@ const client = new Client({
             '--disable-accelerated-2d-canvas',
             '--no-first-run',
             '--no-zygote',
-            '--single-process',
             '--disable-gpu',
             '--disable-software-rasterizer',
             '--disable-extensions'
@@ -90,13 +89,13 @@ client.on('auth_failure', (msg) => {
 
 client.on('ready', () => {
     qrCodeData = ''; 
-    console.log('✅ Bot başarıyla bağlandı ve aktif! İlanlar dinleniyor...');
+    console.log('✅ Bot başarıyla bağlandı ve aktif! Grup ilanları dinleniyor...');
 });
 
-// Gelen mesajları yakalayıp Supabase'e kaydetme
+// Gelen tüm mesajları (gruplar dahil) yakalayıp Supabase'e kaydetme
 client.on('message', async (msg) => {
     try {
-        console.log(`📩 Yeni mesaj alındı: ${msg.body}`);
+        console.log(`📩 Yeni mesaj yakalandı! Gönderen: ${msg.from} | İçerik: ${msg.body}`);
 
         const { data, error } = await supabase
             .from('ilanlar')
