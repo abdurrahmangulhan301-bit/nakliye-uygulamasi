@@ -103,8 +103,13 @@ client.on('message', async (msg) => {
     }
 });
 
+// Sürecin çöplüğe düşmesini ve kapanmasını önleyen kritik yakalayıcılar
 process.on('uncaughtException', (err) => {
-    console.log('⚠️ Geçici Hata Yakalandı:', err.message);
+    console.log('⚠️ Yakalanmayan İstisna (Uncaught Exception):', err.message);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.log('⚠️ Yakalanmayan Promise Reddi (Unhandled Rejection):', reason);
 });
 
 client.initialize().catch(err => {
