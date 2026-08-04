@@ -5,7 +5,6 @@ import { createClient } from '@supabase/supabase-js';
 import express from 'express';
 import qrcode from 'qrcode';
 
-// Web Sunucusu (Render linkiniz üzerinden QR kodu görebilmeniz için)
 const app = express();
 const PORT = process.env.PORT || 10000;
 
@@ -49,7 +48,6 @@ app.listen(PORT, () => {
     console.log(`🌐 Web sunucu ${PORT} portunda başlatıldı.`);
 });
 
-// Supabase Bağlantısı
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
@@ -67,21 +65,30 @@ const client = new Client({
             '--disable-accelerated-2d-canvas',
             '--no-first-run',
             '--no-zygote',
-            '--single-process',
             '--disable-gpu'
+            // Not: --single-process bazı durumlarda login aşamasını dondurduğu için kaldırıldı
         ]
     }
 });
 
 client.on('qr', (qr) => {
     qrCodeData = qr;
-    console.log('📱 QR Kod alındı! Tarayıcıdan şu adrese girerek net bir şekilde taratabilirsiniz:');
+    console.log('📱 QR Kod alındı! Tarayıcıdan şu adrese girerek taratabilirsiniz:');
     console.log('👉 https://nakliye-uygulamasi.onrender.com');
     qrcodeTerminal.generate(qr, { small: true });
 });
 
+// TELEFON OKUTTUĞUNDA TETİKLENEN KRİTİK OLAYLAR
+client.on('authenticated', () => {
+    console.log('🔑 WhatsApp oturumu başarıyla doğrulandı (Authenticated)!');
+});
+
+client.on('auth_failure', (msg) => {
+    console.error('❌ Kimlik doğrulama başarısız oldu:', msg);
+});
+
 client.on('ready', () => {
-    qrCodeData = ''; // Bağlanınca QR verisini temizle
+    qrCodeData = ''; 
     console.log('✅ Bot başarıyla bağlandı ve aktif!');
 });
 
