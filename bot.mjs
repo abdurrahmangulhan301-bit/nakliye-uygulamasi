@@ -67,9 +67,7 @@ const client = new Client({
             '--no-zygote',
             '--disable-gpu',
             '--disable-software-rasterizer',
-            '--disable-extensions',
-            '--disable-features=IsolateOrigins,site-per-process', // Bellek optimizasyonu
-            '--disable-site-isolation-trials'
+            '--disable-extensions'
         ]
     }
 });
@@ -91,12 +89,14 @@ client.on('auth_failure', (msg) => {
 
 client.on('ready', () => {
     qrCodeData = ''; 
-    console.log('✅ Bot başarıyla bağlandı ve aktif! Grup ilanları dinleniyor...');
+    console.log('✅ Bot başarıyla bağlandı ve aktif! Mesajlar dinleniyor...');
 });
 
+// Gelen tüm mesajları ve grup ilanlarını yakalama
 client.on('message', async (msg) => {
     try {
-        console.log(`📩 Yeni mesaj yakalandı! Gönderen: ${msg.from} | İçerik: ${msg.body}`);
+        const isGroup = msg.from.endsWith('@g.us');
+        console.log(`📩 Mesaj alındı [${isGroup ? 'Grup' : 'Özel'}]: ${msg.body}`);
 
         const { data, error } = await supabase
             .from('ilanlar')
