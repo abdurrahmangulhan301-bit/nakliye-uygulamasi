@@ -56,6 +56,10 @@ console.log("⏳ Bot başlatılıyor, lütfen bekleyin...");
 
 const client = new Client({
     authStrategy: new LocalAuth(),
+    webVersionCache: { 
+        type: 'remote', 
+        remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
+    },
     puppeteer: {
         headless: true,
         args: [
@@ -65,8 +69,8 @@ const client = new Client({
             '--disable-accelerated-2d-canvas',
             '--no-first-run',
             '--no-zygote',
-            '--disable-gpu'
-            // Not: --single-process bazı durumlarda login aşamasını dondurduğu için kaldırıldı
+            '--disable-gpu',
+            '--disable-software-rasterizer'
         ]
     }
 });
@@ -78,7 +82,6 @@ client.on('qr', (qr) => {
     qrcodeTerminal.generate(qr, { small: true });
 });
 
-// TELEFON OKUTTUĞUNDA TETİKLENEN KRİTİK OLAYLAR
 client.on('authenticated', () => {
     console.log('🔑 WhatsApp oturumu başarıyla doğrulandı (Authenticated)!');
 });
