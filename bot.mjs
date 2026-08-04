@@ -67,7 +67,9 @@ const client = new Client({
             '--no-zygote',
             '--disable-gpu',
             '--disable-software-rasterizer',
-            '--disable-extensions'
+            '--disable-extensions',
+            '--disable-features=IsolateOrigins,site-per-process', // Bellek optimizasyonu
+            '--disable-site-isolation-trials'
         ]
     }
 });
@@ -92,7 +94,6 @@ client.on('ready', () => {
     console.log('✅ Bot başarıyla bağlandı ve aktif! Grup ilanları dinleniyor...');
 });
 
-// Gelen tüm mesajları (gruplar dahil) yakalayıp Supabase'e kaydetme
 client.on('message', async (msg) => {
     try {
         console.log(`📩 Yeni mesaj yakalandı! Gönderen: ${msg.from} | İçerik: ${msg.body}`);
