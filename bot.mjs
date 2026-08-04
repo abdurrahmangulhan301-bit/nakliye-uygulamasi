@@ -103,7 +103,6 @@ client.on('message', async (msg) => {
     }
 });
 
-// Sürecin çöplüğe düşmesini ve kapanmasını önleyen kritik yakalayıcılar
 process.on('uncaughtException', (err) => {
     console.log('⚠️ Yakalanmayan İstisna (Uncaught Exception):', err.message);
 });
