@@ -98,8 +98,6 @@ client.on('message', async (msg) => {
     try {
         console.log(`📩 Yeni mesaj alındı: ${msg.body}`);
 
-        // İsterseniz buraya sadece belirli kelimeler içerenleri kaydetme filtresi ekleyebilirsiniz.
-        // Şimdilik gelen tüm mesajları (gruplar dahil) Supabase'e kaydediyoruz:
         const { data, error } = await supabase
             .from('ilanlar')
             .insert([
@@ -115,7 +113,7 @@ client.on('message', async (msg) => {
             console.log('✅ İlan başarıyla Supabase veritabanına kaydedildi!');
         }
 
-    } else (err) {
+    } catch (err) {
         console.log('⚠️ Mesaj işlenirken hata:', err.message);
     }
 });
