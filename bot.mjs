@@ -65,7 +65,7 @@ const client = new Client({
             '--disable-accelerated-2d-canvas',
             '--no-first-run',
             '--no-zygote',
-            '--single-process', // Render RAM sınırını aşmamak için kritik
+            '--single-process',
             '--disable-gpu',
             '--disable-software-rasterizer',
             '--disable-extensions'
@@ -90,13 +90,32 @@ client.on('auth_failure', (msg) => {
 
 client.on('ready', () => {
     qrCodeData = ''; 
-    console.log('✅ Bot başarıyla bağlandı ve aktif!');
+    console.log('✅ Bot başarıyla bağlandı ve aktif! İlanlar dinleniyor...');
 });
 
+// Gelen mesajları yakalayıp Supabase'e kaydetme
 client.on('message', async (msg) => {
     try {
-        console.log(`Mesaj alındı: ${msg.body}`);
-    } catch (err) {
+        console.log(`📩 Yeni mesaj alındı: ${msg.body}`);
+
+        // İsterseniz buraya sadece belirli kelimeler içerenleri kaydetme filtresi ekleyebilirsiniz.
+        // Şimdilik gelen tüm mesajları (gruplar dahil) Supabase'e kaydediyoruz:
+        const { data, error } = await supabase
+            .from('ilanlar')
+            .insert([
+                { 
+                    icerik: msg.body, 
+                    gonderen: msg.from 
+                }
+            ]);
+
+        if (error) {
+            console.error('❌ Supabase Kayıt Hatası:', error.message);
+        } else {
+            console.log('✅ İlan başarıyla Supabase veritabanına kaydedildi!');
+        }
+
+    } else (err) {
         console.log('⚠️ Mesaj işlenirken hata:', err.message);
     }
 });
