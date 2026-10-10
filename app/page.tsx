@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import {
   ArrowDownLeft, ArrowUpRight, BarChart3, ChevronDown, CircleDollarSign,
   ClipboardList, Fuel, LayoutDashboard, Plus, Receipt, Route,
-  ShipWheel, Trash2, Truck, Utensils, Wrench, X, Gauge, WalletCards, Download, LogOut, Pencil
+  ShipWheel, Trash2, Truck, Utensils, Wrench, X, Gauge, WalletCards, Download, LogOut, Pencil, MessageSquare
 } from 'lucide-react'
 
 type Tab = 'overview' | 'transactions' | 'receivables' | 'reports' | 'vehicles'
@@ -69,14 +69,12 @@ export default function Page() {
   const [receivables, setReceivables] = useState<Receivable[]>([])
   const [activeCategory, setActiveCategory] = useState('Tümü')
 
-  // Modals & Editing
   const [modalType, setModalType] = useState<'income' | 'expense' | null>(null)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
   const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false)
   const [isReceivableModalOpen, setIsReceivableModalOpen] = useState(false)
   const [editingReceivable, setEditingReceivable] = useState<Receivable | null>(null)
 
-  // Form Fields
   const [amount, setAmount] = useState('')
   const [note, setNote] = useState('')
   const [category, setCategory] = useState('Mazot')
@@ -131,7 +129,6 @@ export default function Page() {
   const expense = useMemo(() => transactions.filter((item) => item.type === 'expense' && (vehicleFilter === 'Tüm araçlar' || item.vehicle === vehicleFilter)).reduce((sum, item) => sum + item.amount, 0), [transactions, vehicleFilter])
   const pendingTotal = receivables.filter((item) => item.status === 'Bekliyor').reduce((sum, item) => sum + Number(item.amount), 0)
 
-  // Gelir / Gider Ekle veya Düzenle
   async function handleTransactionSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!userId) return
@@ -158,13 +155,11 @@ export default function Page() {
     }
 
     if (editingTransaction) {
-      // Güncelleme
       const { error } = await supabase.from('transactions').update(payload).eq('id', editingTransaction.id)
       if (!error) {
         setTransactions(curr => curr.map(t => t.id === editingTransaction.id ? { ...t, ...payload, vehicle: selectedVehicleObj?.plate_number || '42DLB59' } : t))
       }
     } else {
-      // Yeni Ekleme
       const { data, error } = await supabase.from('transactions').insert([payload]).select().single()
       if (!error && data) {
         setTransactions(curr => [{ ...data, vehicle: selectedVehicleObj?.plate_number || '42DLB59', icon: isIncome ? Truck : (categoryItems.find((item) => item.label === category)?.icon || Fuel) }, ...curr])
@@ -195,7 +190,6 @@ export default function Page() {
     await supabase.from('transactions').delete().eq('id', id)
   }
 
-  // Alacak Ekle veya Düzenle
   async function handleReceivableSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!userId) return
@@ -398,7 +392,7 @@ function NavButton({ active, onClick, icon: Icon, children }: { active: boolean;
   return <button onClick={onClick} className={`flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-xs font-extrabold transition-all cursor-pointer ${active ? 'bg-[#eef3f7] text-[#122c4a]' : 'text-[#8391a0] hover:bg-[#f5f7fa] hover:text-[#122c4a]'}`}><Icon className="size-[18px]" />{children}</button> 
 }
 
-// Renklendirilmiş Özet Kartları
+// Mükemmel Renk Uyumlu Özet Kartları
 function SummaryCard({ label, value, icon: Icon, type }: { label: string; value: number; icon: typeof CircleDollarSign; type: 'profit' | 'income' | 'expense' }) { 
   const isProfit = type === 'profit'
   const isIncome = type === 'income'
@@ -412,7 +406,7 @@ function SummaryCard({ label, value, icon: Icon, type }: { label: string; value:
             ₺{currency(value)}
           </p>
         </div>
-        <div className={`flex size-10 items-center justify-center rounded-xl ${isProfit ? 'bg-white/10 text-emerald-400' : isIncome ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+        <div className={`flex size-10 items-center justify-center rounded-xl ${isProfit ? 'bg-white/10 text-emerald-400' : isIncome ? 'bg-emerald-100/70 text-emerald-600' : 'bg-rose-100/70 text-rose-600'}`}>
           <Icon className="size-5" />
         </div>
       </div>
@@ -464,10 +458,11 @@ function Transactions({ categories, activeCategory, setActiveCategory, filtered,
         ) : (
           filtered.map((item: Transaction) => { 
             const Icon = item.icon || Fuel; 
+            const isIncome = item.type === 'income'
             return (
               <div key={item.id} className="group flex items-center justify-between gap-4 border-t border-[#f0f3f6] py-3.5 first:border-t-0">
                 <div className="flex items-center gap-3.5 min-w-0">
-                  <div className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${item.type === 'income' ? 'bg-[#fff0ed] text-[#d64526]' : 'bg-[#eef3f7] text-[#122c4a]'}`}>
+                  <div className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${isIncome ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
                     <Icon className="size-4" />
                   </div>
                   <div className="min-w-0 flex-1">
@@ -480,8 +475,8 @@ function Transactions({ categories, activeCategory, setActiveCategory, filtered,
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
-                  <p className={`text-xs font-black sm:text-sm ${item.type === 'income' ? 'text-[#d64526]' : 'text-[#122c4a]'}`}>
-                    {item.type === 'income' ? '+' : '-'}₺{currency(item.amount)}
+                  <p className={`text-xs font-black sm:text-sm ${isIncome ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {isIncome ? '+' : '-'}₺{currency(item.amount)}
                   </p>
                   <button onClick={() => onEdit(item)} className="rounded-lg p-1.5 text-[#a0aec0] hover:bg-blue-50 hover:text-blue-600 transition-all cursor-pointer" title="Düzenle">
                     <Pencil className="size-3.5" />
@@ -502,6 +497,11 @@ function Transactions({ categories, activeCategory, setActiveCategory, filtered,
 function Receivables({ receivables, toggleStatus, pendingTotal, openModal, onEdit, onDelete }: any) { 
   const [filter, setFilter] = useState<'Tümü' | 'Bekliyor' | 'Ödendi'>('Tümü')
   const filteredRecs = receivables.filter((r: Receivable) => filter === 'Tümü' || r.status === filter)
+
+  const sendWhatsAppMsg = (item: Receivable) => {
+    const text = `Merhaba ${titleCase(item.client)}, Nakliye Cepte üzerindeki ${titleCase(item.route)} rotası için ₺${currency(item.amount)} tutarındaki ödemeyi hatırlatmak isteriz.`
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank')
+  }
 
   return (
     <section className="mt-2">
@@ -542,13 +542,18 @@ function Receivables({ receivables, toggleStatus, pendingTotal, openModal, onEdi
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 shrink-0">
+              <div className="flex items-center gap-2.5 shrink-0">
                 <div className="text-right">
                   <p className="text-xs font-black sm:text-sm">₺{currency(item.amount)}</p>
-                  <button onClick={() => toggleStatus(item)} className={`mt-1 rounded-full px-3 py-0.5 text-[10px] font-black transition-all cursor-pointer ${item.status === 'Bekliyor' ? 'bg-[#fff0ed] text-[#d64526] hover:bg-[#fddbd3]' : 'bg-[#eaf7ef] text-[#2c8750] hover:bg-[#d5f0e0]'}`}>
+                  <button onClick={() => toggleStatus(item)} className={`mt-1 rounded-full px-3 py-0.5 text-[10px] font-black transition-all cursor-pointer ${item.status === 'Bekliyor' ? 'bg-[#fff0ed] text-[#d64526] hover:bg-[#fddbd3]' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'}`}>
                     {item.status}
                   </button>
                 </div>
+                {item.status === 'Bekliyor' && (
+                  <button onClick={() => sendWhatsAppMsg(item)} className="rounded-lg p-1.5 text-emerald-600 hover:bg-emerald-50 transition-all cursor-pointer" title="WhatsApp Hatırlat">
+                    <MessageSquare className="size-3.5" />
+                  </button>
+                )}
                 <button onClick={() => onEdit(item)} className="rounded-lg p-1.5 text-[#a0aec0] hover:bg-blue-50 hover:text-blue-600 transition-all cursor-pointer" title="Düzenle">
                   <Pencil className="size-3.5" />
                 </button>
