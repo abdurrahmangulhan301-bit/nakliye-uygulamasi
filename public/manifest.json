@@ -1,0 +1,20 @@
+{
+  "name": "Nakliye Cepte Finans",
+  "short_name": "Nakliye Finans",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f7fa",
+  "theme_color": "#122c4a",
+  "icons": [
+    {
+      "src": "/logot.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/logot.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
