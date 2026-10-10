@@ -33,6 +33,12 @@ const parseNumeric = (val: string) => {
   return Number(val.replace(/\./g, '').replace(/\D/g, '')) || 0
 }
 
+// Metinleri nizami baş harf büyük veya tam büyük yapmak için yardımcı fonksiyon
+const titleCase = (str: string) => {
+  if (!str) return ''
+  return str.charAt(0).toLocaleUpperCase('tr-TR') + str.slice(1)
+}
+
 export default function Page() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
@@ -72,15 +78,12 @@ export default function Page() {
 
       setUserId(user.id)
 
-      // Profil
       const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single()
       if (prof) setProfile(prof)
 
-      // Araçlar
       const { data: vehs } = await supabase.from('vehicles').select('*').eq('user_id', user.id).order('created_at', { ascending: true })
       if (vehs) setVehicles(vehs)
 
-      // İşlemler
       const { data: txs } = await supabase.from('transactions').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
       if (txs) {
         setTransactions(txs.map((item: any) => ({
@@ -89,7 +92,6 @@ export default function Page() {
         })))
       }
 
-      // Alacaklar
       const { data: recs } = await supabase.from('receivables').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
       if (recs) setReceivables(recs)
 
@@ -119,7 +121,7 @@ export default function Page() {
       user_id: userId,
       type: isIncome ? 'income' : 'expense',
       category: isIncome ? 'Nakliye Bedeli' : category,
-      title: note || (isIncome ? 'Yeni nakliye geliri' : category),
+      title: titleCase(note) || (isIncome ? 'Yeni nakliye geliri' : category),
       detail: !isIncome && category === 'Mazot' && liters ? `${liters} litre${km ? ` · ${km} km` : ''}` : isIncome ? 'Gelir kaydı' : 'Gider kaydı',
       date: 'Bugün',
       amount: parsed,
@@ -170,7 +172,7 @@ export default function Page() {
     await supabase.from('vehicles').delete().eq('id', id)
   }
 
-  // Alacak Ekleme
+  // Alacak Ekleme (Nizami büyük/küçük harf düzeni ile)
   async function addReceivable(e: React.FormEvent) {
     e.preventDefault()
     if (!userId) return
@@ -179,8 +181,8 @@ export default function Page() {
 
     const payload = {
       user_id: userId,
-      client: clientName,
-      route: routeDesc || 'Nakliye Rotası',
+      client: titleCase(clientName.trim()),
+      route: titleCase(routeDesc.trim()) || 'Nakliye Rotası',
       due: dueDate || null,
       amount: parsed,
       status: 'Bekliyor'
@@ -194,7 +196,7 @@ export default function Page() {
     }
   }
 
-  // Alacak Durumu Değiştirme (Ödendi olunca otomatik gelir tablosuna işler)
+  // Alacak Durumu Değiştirme ve Otomatik Gelire Ekleme
   async function toggleReceivableStatus(item: Receivable) {
     const nextStatus = item.status === 'Bekliyor' ? 'Ödendi' : 'Bekliyor'
     
@@ -214,8 +216,8 @@ export default function Page() {
         vehicle: selectedVehicle
       }
 
-      const { data: newTx } = await supabase.from('transactions').insert([incomePayload]).select().single()
-      if (newTx) {
+      const { data: newTx, error: txError } = await supabase.from('transactions').insert([incomePayload]).select().single()
+      if (!txError && newTx) {
         setTransactions((curr) => [{
           ...newTx,
           icon: Truck
@@ -233,7 +235,7 @@ export default function Page() {
     return <div className="flex min-h-screen items-center justify-center bg-[#f5f7fa] text-sm font-bold text-[#122c4a]">Yükleniyor...</div>
   }
 
-  const firstName = profile?.full_name ? profile.full_name.split(' ')[0] : 'Sürücü'
+  const firstName = profile?.full_name ? titleCase(profile.full_name.split(' ')[0]) : 'Sürücü'
   const initials = profile?.full_name ? profile.full_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : 'AK'
 
   const nav = [
@@ -261,7 +263,7 @@ export default function Page() {
           <div className="mt-5 flex items-center gap-3 border-t border-[#e5eaf0] pt-5">
             <div className="flex size-9 items-center justify-center rounded-full bg-[#e7edf2] text-sm font-bold">{initials}</div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-bold">{profile?.full_name || 'Kullanıcı'}</p>
+              <p className="truncate text-xs font-bold">{profile?.full_name ? titleCase(profile.full_name) : 'Kullanıcı'}</p>
               <p className="truncate text-[11px] text-[#8391a0]">{vehiclePlates[0] || 'Plaka Yok'}</p>
             </div>
             <button onClick={handleLogout} className="p-1 text-[#8391a0] hover:text-red-600 cursor-pointer" title="Çıkış"><LogOut className="size-4" /></button>
@@ -332,7 +334,7 @@ function Overview({ income, expense, pendingTotal, setTab, setModalType, categor
 }
 
 function Transactions({ categories, activeCategory, setActiveCategory, filtered, onDelete, compact = false }: any) { 
-  return <section className={`${compact ? 'mt-8' : 'mt-2'} rounded-2xl border border-[#e5eaf0] bg-white p-4 shadow-sm sm:p-6`}><div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#8391a0]">Finans hareketleri</p><h2 className="mt-1 text-lg font-extrabold">İşlem geçmişi</h2></div></div><div className="scrollbar-hide mt-5 flex gap-2 overflow-x-auto pb-1">{categories.map(({ label, icon: Icon }: any) => <button key={label} onClick={() => setActiveCategory(label)} className={`flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold cursor-pointer ${activeCategory === label ? 'border-[#122c4a] bg-[#122c4a] text-white' : 'border-[#e5eaf0] bg-white text-[#536579]'}`}><Icon className="size-4" />{label}</button>)}</div><div className="mt-3 flex flex-col">{filtered.length === 0 ? <p className="py-6 text-center text-xs text-[#8391a0]">Henüz işlem kaydı bulunmuyor.</p> : filtered.map((item: Transaction) => { const Icon = item.icon || Fuel; return <div key={item.id} className="group flex items-center gap-3 border-t border-[#eef1f4] py-4 first:border-t-0"><div className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${item.type === 'income' ? 'bg-[#fff0ed] text-[#d64526]' : 'bg-[#eef3f7] text-[#122c4a]'}`}><Icon className="size-[18px]" /></div><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="truncate text-sm font-bold">{item.title}</p><span className="hidden rounded-full bg-[#f0f3f6] px-2 py-0.5 text-[9px] font-bold sm:inline-flex">{item.vehicle}</span></div><p className="mt-0.5 truncate text-xs text-[#8391a0]">{item.detail} · {item.date}</p></div><p className={`text-sm font-extrabold ${item.type === 'income' ? 'text-[#d64526]' : 'text-[#122c4a]'}`}>{item.type === 'income' ? '+' : '-'}₺{currency(item.amount)}</p><button onClick={() => onDelete(item.id)} className="hidden rounded-md p-1.5 text-[#8391a0] hover:bg-[#f5f7fa] group-hover:block cursor-pointer"><Trash2 className="size-3.5" /></button></div> })}</div></section> 
+  return <section className={`${compact ? 'mt-8' : 'mt-2'} rounded-2xl border border-[#e5eaf0] bg-white p-4 shadow-sm sm:p-6`}><div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#8391a0]">Finans hareketleri</p><h2 className="mt-1 text-lg font-extrabold">İşlem geçmişi</h2></div></div><div className="scrollbar-hide mt-5 flex gap-2 overflow-x-auto pb-1">{categories.map(({ label, icon: Icon }: any) => <button key={label} onClick={() => setActiveCategory(label)} className={`flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold cursor-pointer ${activeCategory === label ? 'border-[#122c4a] bg-[#122c4a] text-white' : 'border-[#e5eaf0] bg-white text-[#536579]'}`}><Icon className="size-4" />{label}</button>)}</div><div className="mt-3 flex flex-col">{filtered.length === 0 ? <p className="py-6 text-center text-xs text-[#8391a0]">Henüz işlem kaydı bulunmuyor.</p> : filtered.map((item: Transaction) => { const Icon = item.icon || Fuel; return <div key={item.id} className="group flex items-center gap-3 border-t border-[#eef1f4] py-4 first:border-t-0"><div className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${item.type === 'income' ? 'bg-[#fff0ed] text-[#d64526]' : 'bg-[#eef3f7] text-[#122c4a]'}`}><Icon className="size-[18px]" /></div><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="truncate text-sm font-bold">{titleCase(item.title)}</p><span className="hidden rounded-full bg-[#f0f3f6] px-2 py-0.5 text-[9px] font-bold sm:inline-flex">{item.vehicle}</span></div><p className="mt-0.5 truncate text-xs text-[#8391a0]">{titleCase(item.detail)} · {item.date}</p></div><p className={`text-sm font-extrabold ${item.type === 'income' ? 'text-[#d64526]' : 'text-[#122c4a]'}`}>{item.type === 'income' ? '+' : '-'}₺{currency(item.amount)}</p><button onClick={() => onDelete(item.id)} className="hidden rounded-md p-1.5 text-[#8391a0] hover:bg-[#f5f7fa] group-hover:block cursor-pointer"><Trash2 className="size-3.5" /></button></div> })}</div></section> 
 }
 
 function Receivables({ receivables, toggleStatus, pendingTotal, openModal }: any) { 
@@ -365,8 +367,8 @@ function Receivables({ receivables, toggleStatus, pendingTotal, openModal }: any
           <div key={item.id} className="flex items-center gap-3 border-b border-[#eef1f4] py-4 last:border-0">
             <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#eef3f7] text-[#122c4a]"><WalletCards className="size-5" /></div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-bold">{item.client}</p>
-              <p className="text-xs text-[#8391a0]">{item.route} · Vade: {item.due || 'Belirtilmedi'}</p>
+              <p className="truncate text-sm font-bold capitalize">{item.client}</p>
+              <p className="text-xs text-[#8391a0] capitalize">{item.route} · Vade: {item.due || 'Belirtilmedi'}</p>
             </div>
             <div className="text-right">
               <p className="text-sm font-extrabold">₺{currency(item.amount)}</p>
@@ -521,7 +523,7 @@ function ReceivableModal({ onSubmit, close, clientName, setClientName, routeDesc
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#122c4a]/45 p-4 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) close() }}>
       <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
         <div className="flex justify-between items-center">
-          <h2 className="text-lg font-extrabold">Yeni Alacak Ekle</h2>
+          <h2 className="text-lg font-extrabold">Yeni Alacak ekle</h2>
           <button onClick={close} className="p-2 text-[#8391a0]"><X className="size-4" /></button>
         </div>
         <form onSubmit={onSubmit} className="mt-4 flex flex-col gap-3">
