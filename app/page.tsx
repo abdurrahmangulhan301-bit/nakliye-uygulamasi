@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import {
   ArrowDownLeft, ArrowUpRight, BarChart3, ChevronDown, CircleDollarSign,
   ClipboardList, Fuel, LayoutDashboard, Plus, Receipt, Route,
-  ShipWheel, Trash2, Truck, Utensils, Wrench, X, Gauge, WalletCards, Download, LogOut
+  ShipWheel, Trash2, Truck, Utensils, Wrench, X, Gauge, WalletCards, Download, LogOut, Check
 } from 'lucide-react'
 
 type Tab = 'overview' | 'transactions' | 'receivables' | 'reports' | 'vehicles'
@@ -22,7 +22,6 @@ const categoryItems = [
 
 const currency = (amount: number) => new Intl.NumberFormat('tr-TR').format(amount)
 
-// Sayı girdilerini binlik ayraçlı (noktalı) formata dönüştüren yardımcı fonksiyon
 const formatNumberInput = (val: string) => {
   const digitsOnly = val.replace(/\D/g, '')
   if (!digitsOnly) return ''
@@ -236,7 +235,7 @@ export default function Page() {
               <p className="truncate text-xs font-bold">{profile?.full_name || 'Kullanıcı'}</p>
               <p className="truncate text-[11px] text-[#8391a0]">{vehiclePlates[0] || 'Plaka Yok'}</p>
             </div>
-            <button onClick={handleLogout} className="p-1 text-[#8391a0] hover:text-red-600" title="Çıkış"><LogOut className="size-4" /></button>
+            <button onClick={handleLogout} className="p-1 text-[#8391a0] hover:text-red-600 cursor-pointer" title="Çıkış"><LogOut className="size-4" /></button>
           </div>
         </aside>
 
@@ -255,14 +254,14 @@ export default function Page() {
                 </select>
                 <ChevronDown className="size-3.5" />
               </label>
-              <button onClick={handleLogout} className="flex size-10 items-center justify-center rounded-full bg-white text-[#8391a0] shadow-sm hover:text-red-600"><LogOut className="size-[18px]" /></button>
+              <button onClick={handleLogout} className="flex size-10 items-center justify-center rounded-full bg-white text-[#8391a0] shadow-sm hover:text-red-600 cursor-pointer"><LogOut className="size-[18px]" /></button>
             </div>
           </header>
 
           {tab === 'overview' && <Overview income={income} expense={expense} pendingTotal={pendingTotal} setTab={setTab} setModalType={setModalType} categories={categoryItems} activeCategory={activeCategory} setActiveCategory={setActiveCategory} filtered={filtered} onDelete={deleteTransaction} />}
           {tab === 'transactions' && <Transactions categories={categoryItems} activeCategory={activeCategory} setActiveCategory={setActiveCategory} filtered={filtered} onDelete={deleteTransaction} />}
           {tab === 'receivables' && <Receivables receivables={receivables} toggleStatus={toggleReceivableStatus} pendingTotal={pendingTotal} openModal={() => setIsReceivableModalOpen(true)} />}
-          {tab === 'reports' && <Reports income={income} expense={expense} />}
+          {tab === 'reports' && <Reports transactions={transactions} vehicleFilter={vehicleFilter} income={income} expense={expense} />}
           {tab === 'vehicles' && <Vehicles vehicles={vehicles} onDeleteVehicle={deleteVehicle} openModal={() => setIsVehicleModalOpen(true)} />}
         </section>
       </div>
@@ -292,7 +291,7 @@ function Brand() {
 }
 
 function NavButton({ active, onClick, icon: Icon, children }: { active: boolean; onClick: () => void; icon: typeof LayoutDashboard; children: string }) { 
-  return <button onClick={onClick} className={`flex items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-bold ${active ? 'bg-[#eef3f7] text-[#122c4a]' : 'text-[#8391a0] hover:bg-[#f5f7fa]'}`}><Icon className="size-[18px]" />{children}</button> 
+  return <button onClick={onClick} className={`flex items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-bold cursor-pointer ${active ? 'bg-[#eef3f7] text-[#122c4a]' : 'text-[#8391a0] hover:bg-[#f5f7fa]'}`}><Icon className="size-[18px]" />{children}</button> 
 }
 
 function SummaryCard({ label, value, icon: Icon, highlighted, expense }: { label: string; value: number; icon: typeof CircleDollarSign; highlighted?: boolean; expense?: boolean }) { 
@@ -308,11 +307,102 @@ function Transactions({ categories, activeCategory, setActiveCategory, filtered,
 }
 
 function Receivables({ receivables, toggleStatus, pendingTotal, openModal }: any) { 
-  return <section className="mt-2"><div className="flex items-end justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d64526]">Cari alacaklar defteri</p><h2 className="mt-1 text-2xl font-extrabold">Alacaklar / Navlun Defteri</h2></div><button onClick={openModal} className="rounded-xl bg-[#d64526] px-4 py-3 text-xs font-extrabold text-white cursor-pointer"><Plus className="mr-1 inline size-4" /> Alacak ekle</button></div><div className="mt-5 rounded-2xl bg-[#122c4a] p-5 text-white"><p className="text-xs text-white/60">Tahsil edilmesi beklenen</p><p className="mt-1 text-3xl font-extrabold">₺{currency(pendingTotal)}</p></div><div className="mt-5 flex flex-col rounded-2xl border border-[#e5eaf0] bg-white px-4 shadow-sm">{receivables.length === 0 ? <p className="py-6 text-center text-xs text-[#8391a0]">Kayıtlı alacak bulunmuyor.</p> : receivables.map((item: Receivable) => <div key={item.id} className="flex items-center gap-3 border-b border-[#eef1f4] py-4 last:border-0"><div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#eef3f7] text-[#122c4a]"><WalletCards className="size-5" /></div><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{item.client}</p><p className="text-xs text-[#8391a0]">{item.route} · Vade: {item.due || 'Belirtilmedi'}</p></div><div className="text-right"><p className="text-sm font-extrabold">₺{currency(item.amount)}</p><button onClick={() => toggleStatus(item.id, item.status)} className={`mt-1 rounded-full px-3 py-1 text-[10px] font-bold cursor-pointer ${item.status === 'Bekliyor' ? 'bg-[#fff0ed] text-[#d64526]' : 'bg-[#eaf7ef] text-[#2c8750]'}`}>{item.status}</button></div></div>)}</div></section> 
+  const [filter, setFilter] = useState<'Tümü' | 'Bekliyor' | 'Ödendi'>('Tümü')
+  const filteredRecs = receivables.filter((r: Receivable) => filter === 'Tümü' || r.status === filter)
+
+  return (
+    <section className="mt-2">
+      <div className="flex items-end justify-between">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d64526]">Cari alacaklar defteri</p>
+          <h2 className="mt-1 text-2xl font-extrabold">Alacaklar / Navlun Defteri</h2>
+        </div>
+        <button onClick={openModal} className="rounded-xl bg-[#d64526] px-4 py-3 text-xs font-extrabold text-white cursor-pointer"><Plus className="mr-1 inline size-4" /> Alacak ekle</button>
+      </div>
+
+      <div className="mt-5 rounded-2xl bg-[#122c4a] p-5 text-white">
+        <p className="text-xs text-white/60">Tahsil edilmesi beklenen toplam</p>
+        <p className="mt-1 text-3xl font-extrabold">₺{currency(pendingTotal)}</p>
+      </div>
+
+      <div className="mt-5 flex gap-2">
+        {(['Tümü', 'Bekliyor', 'Ödendi'] as const).map((f) => (
+          <button key={f} onClick={() => setFilter(f)} className={`rounded-xl border px-3 py-1.5 text-xs font-bold cursor-pointer ${filter === f ? 'border-[#122c4a] bg-[#122c4a] text-white' : 'border-[#e5eaf0] bg-white text-[#536579]'}`}>{f}</button>
+        ))}
+      </div>
+
+      <div className="mt-3 flex flex-col rounded-2xl border border-[#e5eaf0] bg-white px-4 shadow-sm">
+        {filteredRecs.length === 0 ? <p className="py-6 text-center text-xs text-[#8391a0]">Kayıtlı alacak bulunmuyor.</p> : filteredRecs.map((item: Receivable) => (
+          <div key={item.id} className="flex items-center gap-3 border-b border-[#eef1f4] py-4 last:border-0">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#eef3f7] text-[#122c4a]"><WalletCards className="size-5" /></div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-bold">{item.client}</p>
+              <p className="text-xs text-[#8391a0]">{item.route} · Vade: {item.due || 'Belirtilmedi'}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-sm font-extrabold">₺{currency(item.amount)}</p>
+              <button onClick={() => toggleStatus(item.id, item.status)} className={`mt-1 rounded-full px-3 py-1 text-[10px] font-bold cursor-pointer ${item.status === 'Bekliyor' ? 'bg-[#fff0ed] text-[#d64526]' : 'bg-[#eaf7ef] text-[#2c8750]'}`}>{item.status}</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
 }
 
-function Reports({ income, expense }: { income: number; expense: number }) { 
-  return <section className="mt-2"><div className="flex items-end justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d64526]">Performans özeti</p><h2 className="mt-1 text-2xl font-extrabold">Gelişmiş Raporlar</h2></div><button onClick={() => window.print()} className="flex items-center gap-2 rounded-xl border border-[#e5eaf0] bg-white px-4 py-3 text-xs font-extrabold cursor-pointer"><Download className="size-4" /> Raporu İndir</button></div><div className="mt-5 grid gap-4 sm:grid-cols-2"><article className="rounded-2xl border border-[#e5eaf0] bg-white p-5"><h3 className="font-extrabold">Özet Bilanço</h3><div className="mt-4 space-y-3 text-sm"><div className="flex justify-between border-b pb-2"><span>Toplam Gelir</span><span className="font-extrabold text-[#d64526]">₺{currency(income)}</span></div><div className="flex justify-between border-b pb-2"><span>Toplam Gider</span><span className="font-extrabold text-[#122c4a]">₺{currency(expense)}</span></div><div className="flex justify-between pt-1 text-base font-extrabold"><span>Net Kâr</span><span className={income - expense >= 0 ? 'text-green-600' : 'text-red-600'}>₺{currency(income - expense)}</span></div></div></article></div></section> 
+function Reports({ transactions, vehicleFilter, income, expense }: { transactions: Transaction[]; vehicleFilter: string; income: number; expense: number }) { 
+  const expensesList = useMemo(() => transactions.filter(t => t.type === 'expense' && (vehicleFilter === 'Tüm araçlar' || t.vehicle === vehicleFilter)), [transactions, vehicleFilter])
+  
+  const categoryTotals = useMemo(() => {
+    const totals: Record<string, number> = {}
+    expensesList.forEach(t => {
+      totals[t.category] = (totals[t.category] || 0) + t.amount
+    })
+    return totals
+  }, [expensesList])
+
+  return (
+    <section className="mt-2">
+      <div className="flex items-end justify-between">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d64526]">Performans özeti</p>
+          <h2 className="mt-1 text-2xl font-extrabold">Gelişmiş Raporlar</h2>
+        </div>
+        <button onClick={() => window.print()} className="flex items-center gap-2 rounded-xl border border-[#e5eaf0] bg-white px-4 py-3 text-xs font-extrabold cursor-pointer"><Download className="size-4" /> Raporu İndir</button>
+      </div>
+
+      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <article className="rounded-2xl border border-[#e5eaf0] bg-white p-5 shadow-sm">
+          <h3 className="font-extrabold">Özet Bilanço ({vehicleFilter})</h3>
+          <div className="mt-4 space-y-3 text-sm">
+            <div className="flex justify-between border-b pb-2"><span>Toplam Gelir</span><span className="font-extrabold text-[#d64526]">₺{currency(income)}</span></div>
+            <div className="flex justify-between border-b pb-2"><span>Toplam Gider</span><span className="font-extrabold text-[#122c4a]">₺{currency(expense)}</span></div>
+            <div className="flex justify-between pt-1 text-base font-extrabold"><span>Net Kâr</span><span className={income - expense >= 0 ? 'text-green-600' : 'text-red-600'}>₺{currency(income - expense)}</span></div>
+          </div>
+        </article>
+
+        <article className="rounded-2xl border border-[#e5eaf0] bg-white p-5 shadow-sm">
+          <h3 className="font-extrabold">Gider Dağılımı</h3>
+          <div className="mt-4 space-y-3">
+            {Object.keys(categoryTotals).length === 0 ? <p className="text-xs text-[#8391a0]">Henüz gider kaydı yok.</p> : Object.entries(categoryTotals).map(([cat, amt]) => {
+              const pct = expense > 0 ? Math.round((amt / expense) * 100) : 0
+              return (
+                <div key={cat} className="space-y-1">
+                  <div className="flex justify-between text-xs font-bold">
+                    <span>{cat}</span>
+                    <span>₺{currency(amt)} (%{pct})</span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-[#f0f3f6]">
+                    <div className="h-full bg-[#d64526]" style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </article>
+      </div>
+    </section>
+  )
 }
 
 function Vehicles({ vehicles, onDeleteVehicle, openModal }: any) { 
