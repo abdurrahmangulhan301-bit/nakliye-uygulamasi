@@ -89,6 +89,9 @@ export default function Page() {
       if (txs) {
         setTransactions(txs.map((item: any) => ({
           ...item,
+          title: item.title || item.description || item.category || 'İşlem',
+          detail: item.detail || 'İşlem Kaydı',
+          vehicle: item.vehicle || '42DLB59',
           icon: item.type === 'income' ? Truck : (categoryItems.find((c) => c.label === item.category)?.icon || Fuel)
         })))
       }
@@ -109,6 +112,7 @@ export default function Page() {
   const expense = useMemo(() => transactions.filter((item) => item.type === 'expense' && (vehicleFilter === 'Tüm araçlar' || item.vehicle === vehicleFilter)).reduce((sum, item) => sum + item.amount, 0), [transactions, vehicleFilter])
   const pendingTotal = receivables.filter((item) => item.status === 'Bekliyor').reduce((sum, item) => sum + Number(item.amount), 0)
 
+  // Yeni İşlem Ekle
   async function addTransaction(e: React.FormEvent) {
     e.preventDefault()
     if (!userId) return
@@ -118,17 +122,18 @@ export default function Page() {
       return
     }
     const isIncome = modalType === 'income'
-    const selectedVehicle = vehicleFilter === 'Tüm araçlar' ? (vehiclePlates[0] || 'Genel') : vehicleFilter
+    const selectedVehicleObj = vehicles.find(v => v.plate_number === vehicleFilter) || vehicles[0]
 
+    // Veritabanı ile tam uyumlu payload
     const payload = {
       user_id: userId,
+      vehicle_id: selectedVehicleObj?.id || null,
       type: isIncome ? 'income' : 'expense',
       category: isIncome ? 'Nakliye Bedeli' : category,
       title: titleCase(note) || (isIncome ? 'Yeni Nakliye Geliri' : category),
       detail: !isIncome && category === 'Mazot' && liters ? `${liters} Litre${km ? ` · ${km} KM` : ''}` : isIncome ? 'Gelir Kaydı' : 'Gider Kaydı',
       date: 'Bugün',
       amount: parsed,
-      vehicle: selectedVehicle,
       liters: parseNumeric(liters) || null,
       km: parseNumeric(km) || null
     }
@@ -142,6 +147,7 @@ export default function Page() {
     if (data) {
       setTransactions((curr) => [{
         ...data,
+        vehicle: selectedVehicleObj?.plate_number || '42DLB59',
         icon: isIncome ? Truck : (categoryItems.find((item) => item.label === category)?.icon || Fuel)
       }, ...curr])
     }
@@ -217,22 +223,23 @@ export default function Page() {
     await supabase.from('receivables').update({ status: nextStatus }).eq('id', item.id)
 
     if (nextStatus === 'Ödendi' && userId) {
-      const selectedVehicle = vehiclePlates[0] || 'Genel'
+      const selectedVehicleObj = vehicles[0]
       const incomePayload = {
         user_id: userId,
+        vehicle_id: selectedVehicleObj?.id || null,
         type: 'income',
         category: 'Nakliye Bedeli',
         title: `${titleCase(item.client)} (Tahsilat)`,
         detail: `Alacak tahsili: ${titleCase(item.route)}`,
         date: 'Bugün',
-        amount: item.amount,
-        vehicle: selectedVehicle
+        amount: item.amount
       }
 
       const { data: newTx, error: txError } = await supabase.from('transactions').insert([incomePayload]).select().single()
       if (!txError && newTx) {
         setTransactions((curr) => [{
           ...newTx,
+          vehicle: selectedVehicleObj?.plate_number || '42DLB59',
           icon: Truck
         }, ...curr])
       }
