@@ -28,6 +28,11 @@ const formatNumberInput = (val: string) => {
   return new Intl.NumberFormat('tr-TR').format(Number(digitsOnly))
 }
 
+const parseNumeric = (val: string) => {
+  if (!val) return 0
+  return Number(val.replace(/\./g, '').replace(/\D/g, '')) || 0
+}
+
 export default function Page() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
@@ -105,7 +110,7 @@ export default function Page() {
   async function addTransaction(e: React.FormEvent) {
     e.preventDefault()
     if (!userId) return
-    const parsed = Number(amount.replace(/\D/g, ''))
+    const parsed = parseNumeric(amount)
     if (!parsed) return
     const isIncome = modalType === 'income'
     const selectedVehicle = vehicleFilter === 'Tüm araçlar' ? (vehiclePlates[0] || 'Genel') : vehicleFilter
@@ -119,8 +124,8 @@ export default function Page() {
       date: 'Bugün',
       amount: parsed,
       vehicle: selectedVehicle,
-      liters: Number(liters.replace(/\D/g, '')) || null,
-      km: Number(km.replace(/\D/g, '')) || null
+      liters: parseNumeric(liters) || null,
+      km: parseNumeric(km) || null
     }
 
     const { data, error } = await supabase.from('transactions').insert([payload]).select().single()
@@ -169,7 +174,7 @@ export default function Page() {
   async function addReceivable(e: React.FormEvent) {
     e.preventDefault()
     if (!userId) return
-    const parsed = Number(recAmount.replace(/\D/g, ''))
+    const parsed = parseNumeric(recAmount)
     if (!parsed || !clientName) return
 
     const payload = {
@@ -189,10 +194,34 @@ export default function Page() {
     }
   }
 
-  async function toggleReceivableStatus(id: string, currentStatus: string) {
-    const nextStatus = currentStatus === 'Bekliyor' ? 'Ödendi' : 'Bekliyor'
-    setReceivables((curr) => curr.map((r) => r.id === id ? { ...r, status: nextStatus as any } : r))
-    await supabase.from('receivables').update({ status: nextStatus }).eq('id', id)
+  // Alacak Durumu Değiştirme (Ödendi olunca otomatik gelir tablosuna işler)
+  async function toggleReceivableStatus(item: Receivable) {
+    const nextStatus = item.status === 'Bekliyor' ? 'Ödendi' : 'Bekliyor'
+    
+    setReceivables((curr) => curr.map((r) => r.id === item.id ? { ...r, status: nextStatus } : r))
+    await supabase.from('receivables').update({ status: nextStatus }).eq('id', item.id)
+
+    if (nextStatus === 'Ödendi' && userId) {
+      const selectedVehicle = vehiclePlates[0] || 'Genel'
+      const incomePayload = {
+        user_id: userId,
+        type: 'income',
+        category: 'Nakliye Bedeli',
+        title: `${item.client} (Tahsilat)`,
+        detail: `Alacak tahsili: ${item.route}`,
+        date: 'Bugün',
+        amount: item.amount,
+        vehicle: selectedVehicle
+      }
+
+      const { data: newTx } = await supabase.from('transactions').insert([incomePayload]).select().single()
+      if (newTx) {
+        setTransactions((curr) => [{
+          ...newTx,
+          icon: Truck
+        }, ...curr])
+      }
+    }
   }
 
   async function handleLogout() {
@@ -341,7 +370,7 @@ function Receivables({ receivables, toggleStatus, pendingTotal, openModal }: any
             </div>
             <div className="text-right">
               <p className="text-sm font-extrabold">₺{currency(item.amount)}</p>
-              <button onClick={() => toggleStatus(item.id, item.status)} className={`mt-1 rounded-full px-3 py-1 text-[10px] font-bold cursor-pointer ${item.status === 'Bekliyor' ? 'bg-[#fff0ed] text-[#d64526]' : 'bg-[#eaf7ef] text-[#2c8750]'}`}>{item.status}</button>
+              <button onClick={() => toggleStatus(item)} className={`mt-1 rounded-full px-3 py-1 text-[10px] font-bold cursor-pointer ${item.status === 'Bekliyor' ? 'bg-[#fff0ed] text-[#d64526]' : 'bg-[#eaf7ef] text-[#2c8750]'}`}>{item.status}</button>
             </div>
           </div>
         ))}
