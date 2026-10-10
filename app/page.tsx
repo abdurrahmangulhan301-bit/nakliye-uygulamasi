@@ -30,13 +30,17 @@ const formatNumberInput = (val: string) => {
 
 const parseNumeric = (val: string) => {
   if (!val) return 0
-  return Number(val.replace(/\./g, '').replace(/\D/g, '')) || 0
+  return Number(val.toString().replace(/\./g, '').replace(/\D/g, '')) || 0
 }
 
-// Metinleri nizami baş harf büyük veya tam büyük yapmak için yardımcı fonksiyon
+// Metinleri nizami baş harfleri büyük yapma (Türkçe karakter uyumlu)
 const titleCase = (str: string) => {
   if (!str) return ''
-  return str.charAt(0).toLocaleUpperCase('tr-TR') + str.slice(1)
+  return str
+    .trim()
+    .split(' ')
+    .map((word) => word.charAt(0).toLocaleUpperCase('tr-TR') + word.slice(1).toLocaleLowerCase('tr-TR'))
+    .join(' ')
 }
 
 export default function Page() {
@@ -108,12 +112,15 @@ export default function Page() {
   const expense = useMemo(() => transactions.filter((item) => item.type === 'expense' && (vehicleFilter === 'Tüm araçlar' || item.vehicle === vehicleFilter)).reduce((sum, item) => sum + item.amount, 0), [transactions, vehicleFilter])
   const pendingTotal = receivables.filter((item) => item.status === 'Bekliyor').reduce((sum, item) => sum + Number(item.amount), 0)
 
-  // Yeni İşlem Ekle
+  // Yeni İşlem Ekle (Gelir/Gider)
   async function addTransaction(e: React.FormEvent) {
     e.preventDefault()
     if (!userId) return
     const parsed = parseNumeric(amount)
-    if (!parsed) return
+    if (!parsed) {
+      alert('Lütfen geçerli bir tutar girin!')
+      return
+    }
     const isIncome = modalType === 'income'
     const selectedVehicle = vehicleFilter === 'Tüm araçlar' ? (vehiclePlates[0] || 'Genel') : vehicleFilter
 
@@ -121,8 +128,8 @@ export default function Page() {
       user_id: userId,
       type: isIncome ? 'income' : 'expense',
       category: isIncome ? 'Nakliye Bedeli' : category,
-      title: titleCase(note) || (isIncome ? 'Yeni nakliye geliri' : category),
-      detail: !isIncome && category === 'Mazot' && liters ? `${liters} litre${km ? ` · ${km} km` : ''}` : isIncome ? 'Gelir kaydı' : 'Gider kaydı',
+      title: titleCase(note) || (isIncome ? 'Yeni Nakliye Geliri' : category),
+      detail: !isIncome && category === 'Mazot' && liters ? `${liters} Litre${km ? ` · ${km} KM` : ''}` : isIncome ? 'Gelir Kaydı' : 'Gider Kaydı',
       date: 'Bugün',
       amount: parsed,
       vehicle: selectedVehicle,
@@ -131,7 +138,12 @@ export default function Page() {
     }
 
     const { data, error } = await supabase.from('transactions').insert([payload]).select().single()
-    if (!error && data) {
+    if (error) {
+      alert('Hata oluştu: ' + error.message)
+      return
+    }
+
+    if (data) {
       setTransactions((curr) => [{
         ...data,
         icon: isIncome ? Truck : (categoryItems.find((item) => item.label === category)?.icon || Fuel)
@@ -158,7 +170,7 @@ export default function Page() {
 
     const { data, error } = await supabase.from('vehicles').insert([{ user_id: userId, plate_number: formattedPlate }]).select().single()
     if (error) {
-      alert('Bu plaka zaten mevcut veya bir hata oluştu.')
+      alert('Hata oluştu: ' + error.message)
     } else if (data) {
       setVehicles((curr) => [...curr, data])
       setNewPlate('')
@@ -172,31 +184,39 @@ export default function Page() {
     await supabase.from('vehicles').delete().eq('id', id)
   }
 
-  // Alacak Ekleme (Nizami büyük/küçük harf düzeni ile)
+  // Alacak Ekleme
   async function addReceivable(e: React.FormEvent) {
     e.preventDefault()
     if (!userId) return
     const parsed = parseNumeric(recAmount)
-    if (!parsed || !clientName) return
+    if (!parsed || !clientName) {
+      alert('Lütfen firma adı ve tutarı eksiksiz girin!')
+      return
+    }
 
     const payload = {
       user_id: userId,
-      client: titleCase(clientName.trim()),
-      route: titleCase(routeDesc.trim()) || 'Nakliye Rotası',
-      due: dueDate || null,
+      client: titleCase(clientName),
+      route: titleCase(routeDesc) || 'Nakliye Rotası',
+      due: titleCase(dueDate) || null,
       amount: parsed,
       status: 'Bekliyor'
     }
 
     const { data, error } = await supabase.from('receivables').insert([payload]).select().single()
-    if (!error && data) {
+    if (error) {
+      alert('Alacak eklenirken hata: ' + error.message)
+      return
+    }
+
+    if (data) {
       setReceivables((curr) => [data, ...curr])
       setClientName(''); setRouteDesc(''); setRecAmount(''); setDueDate('')
       setIsReceivableModalOpen(false)
     }
   }
 
-  // Alacak Durumu Değiştirme ve Otomatik Gelire Ekleme
+  // Alacak Durumu Değiştirme (Ödendi olunca otomatik Gelire ekler)
   async function toggleReceivableStatus(item: Receivable) {
     const nextStatus = item.status === 'Bekliyor' ? 'Ödendi' : 'Bekliyor'
     
@@ -209,8 +229,8 @@ export default function Page() {
         user_id: userId,
         type: 'income',
         category: 'Nakliye Bedeli',
-        title: `${item.client} (Tahsilat)`,
-        detail: `Alacak tahsili: ${item.route}`,
+        title: `${titleCase(item.client)} (Tahsilat)`,
+        detail: `Alacak tahsili: ${titleCase(item.route)}`,
         date: 'Bugün',
         amount: item.amount,
         vehicle: selectedVehicle
@@ -367,8 +387,8 @@ function Receivables({ receivables, toggleStatus, pendingTotal, openModal }: any
           <div key={item.id} className="flex items-center gap-3 border-b border-[#eef1f4] py-4 last:border-0">
             <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#eef3f7] text-[#122c4a]"><WalletCards className="size-5" /></div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-bold capitalize">{item.client}</p>
-              <p className="text-xs text-[#8391a0] capitalize">{item.route} · Vade: {item.due || 'Belirtilmedi'}</p>
+              <p className="truncate text-sm font-bold">{titleCase(item.client)}</p>
+              <p className="text-xs text-[#8391a0]">{titleCase(item.route)} · Vade: {titleCase(item.due) || 'Belirtilmedi'}</p>
             </div>
             <div className="text-right">
               <p className="text-sm font-extrabold">₺{currency(item.amount)}</p>
@@ -523,7 +543,7 @@ function ReceivableModal({ onSubmit, close, clientName, setClientName, routeDesc
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#122c4a]/45 p-4 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) close() }}>
       <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
         <div className="flex justify-between items-center">
-          <h2 className="text-lg font-extrabold">Yeni Alacak ekle</h2>
+          <h2 className="text-lg font-extrabold">Yeni Alacak Ekle</h2>
           <button onClick={close} className="p-2 text-[#8391a0]"><X className="size-4" /></button>
         </div>
         <form onSubmit={onSubmit} className="mt-4 flex flex-col gap-3">
