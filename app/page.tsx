@@ -4,9 +4,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import {
-  ArrowDownLeft, ArrowUpRight, BarChart3, Bell, CalendarDays, ChevronDown, CircleDollarSign,
-  ClipboardList, FileText, Fuel, LayoutDashboard, Plus, Receipt, Route,
-  Settings, ShipWheel, Trash2, Truck, Utensils, Wrench, X, Gauge, WalletCards, Clock3, Download, LogOut, Check
+  ArrowDownLeft, ArrowUpRight, BarChart3, ChevronDown, CircleDollarSign,
+  ClipboardList, Fuel, LayoutDashboard, Plus, Receipt, Route,
+  ShipWheel, Trash2, Truck, Utensils, Wrench, X, Gauge, WalletCards, Download, LogOut
 } from 'lucide-react'
 
 type Tab = 'overview' | 'transactions' | 'receivables' | 'reports' | 'vehicles'
@@ -39,23 +39,18 @@ export default function Page() {
   const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false)
   const [isReceivableModalOpen, setIsReceivableModalOpen] = useState(false)
 
-  // Form Fields - Transaction
+  // Form Fields
   const [amount, setAmount] = useState('')
   const [note, setNote] = useState('')
   const [category, setCategory] = useState('Mazot')
   const [liters, setLiters] = useState('')
   const [km, setKm] = useState('')
-
-  // Form Fields - Vehicle
   const [newPlate, setNewPlate] = useState('')
-
-  // Form Fields - Receivable
   const [clientName, setClientName] = useState('')
   const [routeDesc, setRouteDesc] = useState('')
   const [recAmount, setRecAmount] = useState('')
   const [dueDate, setDueDate] = useState('')
 
-  // Oturum ve Veri Çekme
   useEffect(() => {
     async function loadData() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -71,7 +66,7 @@ export default function Page() {
       if (prof) setProfile(prof)
 
       // Araçlar
-      const { data: vehs } = await supabase.from('vehicles').select('*').eq('user_id', user.id)
+      const { data: vehs } = await supabase.from('vehicles').select('*').eq('user_id', user.id).order('created_at', { ascending: true })
       if (vehs) setVehicles(vehs)
 
       // İşlemler
@@ -82,6 +77,10 @@ export default function Page() {
           icon: item.type === 'income' ? Truck : (categoryItems.find((c) => c.label === item.category)?.icon || Fuel)
         })))
       }
+
+      // Alacaklar
+      const { data: recs } = await supabase.from('receivables').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
+      if (recs) setReceivables(recs)
 
       setLoading(false)
     }
@@ -94,7 +93,7 @@ export default function Page() {
   const filtered = useMemo(() => transactions.filter((item) => (vehicleFilter === 'Tüm araçlar' || item.vehicle === vehicleFilter) && (activeCategory === 'Tümü' || item.category === activeCategory)), [transactions, vehicleFilter, activeCategory])
   const income = useMemo(() => transactions.filter((item) => item.type === 'income' && (vehicleFilter === 'Tüm araçlar' || item.vehicle === vehicleFilter)).reduce((sum, item) => sum + item.amount, 0), [transactions, vehicleFilter])
   const expense = useMemo(() => transactions.filter((item) => item.type === 'expense' && (vehicleFilter === 'Tüm araçlar' || item.vehicle === vehicleFilter)).reduce((sum, item) => sum + item.amount, 0), [transactions, vehicleFilter])
-  const pendingTotal = receivables.filter((item) => item.status === 'Bekliyor').reduce((sum, item) => sum + item.amount, 0)
+  const pendingTotal = receivables.filter((item) => item.status === 'Bekliyor').reduce((sum, item) => sum + Number(item.amount), 0)
 
   // Yeni İşlem Ekle
   async function addTransaction(e: React.FormEvent) {
@@ -133,40 +132,64 @@ export default function Page() {
     await supabase.from('transactions').delete().eq('id', id)
   }
 
-  // Yeni Araç Ekle
+  // Yeni Araç Ekle (Mükerrer Kontrollü)
   async function addVehicle(e: React.FormEvent) {
     e.preventDefault()
-    if (!userId || !newPlate.trim()) return
+    const formattedPlate = newPlate.trim().toUpperCase()
+    if (!userId || !formattedPlate) return
 
-    const { data, error } = await supabase.from('vehicles').insert([{ user_id: userId, plate_number: newPlate.toUpperCase() }]).select().single()
-    if (!error && data) {
-      setVehicles((curr) => [...curr, data])
+    // İstemci tarafı kontrolü
+    if (vehicles.some((v) => v.plate_number === formattedPlate)) {
+      alert('Bu plaka zaten ekli!')
+      return
     }
-    setNewPlate('')
-    setIsVehicleModalOpen(false)
+
+    const { data, error } = await supabase.from('vehicles').insert([{ user_id: userId, plate_number: formattedPlate }]).select().single()
+    if (error) {
+      alert('Bu plaka zaten mevcut veya bir hata oluştu.')
+    } else if (data) {
+      setVehicles((curr) => [...curr, data])
+      setNewPlate('')
+      setIsVehicleModalOpen(false)
+    }
   }
 
-  // Yeni Alacak Ekle
-  function addReceivable(e: React.FormEvent) {
+  // Araç Silme
+  async function deleteVehicle(id: string) {
+    if (!confirm('Bu aracı silmek istediğinize emin misiniz?')) return
+    setVehicles((curr) => curr.filter((v) => v.id !== id))
+    await supabase.from('vehicles').delete().eq('id', id)
+  }
+
+  // Alacak Ekleme
+  async function addReceivable(e: React.FormEvent) {
     e.preventDefault()
+    if (!userId) return
     const parsed = Number(recAmount.replace(/\D/g, ''))
     if (!parsed || !clientName) return
 
-    const newRec: Receivable = {
-      id: Date.now().toString(),
+    const payload = {
+      user_id: userId,
       client: clientName,
       route: routeDesc || 'Nakliye Rotası',
-      due: dueDate || 'Yakında',
+      due: dueDate || null,
       amount: parsed,
       status: 'Bekliyor'
     }
-    setReceivables((curr) => [newRec, ...curr])
-    setClientName(''); setRouteDesc(''); setRecAmount(''); setDueDate('')
-    setIsReceivableModalOpen(false)
+
+    const { data, error } = await supabase.from('receivables').insert([payload]).select().single()
+    if (!error && data) {
+      setReceivables((curr) => [data, ...curr])
+      setClientName(''); setRouteDesc(''); setRecAmount(''); setDueDate('')
+      setIsReceivableModalOpen(false)
+    }
   }
 
-  function toggleReceivableStatus(id: string) {
-    setReceivables((curr) => curr.map((r) => r.id === id ? { ...r, status: r.status === 'Bekliyor' ? 'Ödendi' : 'Bekliyor' } : r))
+  // Alacak Durumu Değiştirme
+  async function toggleReceivableStatus(id: string, currentStatus: string) {
+    const nextStatus = currentStatus === 'Bekliyor' ? 'Ödendi' : 'Bekliyor'
+    setReceivables((curr) => curr.map((r) => r.id === id ? { ...r, status: nextStatus as any } : r))
+    await supabase.from('receivables').update({ status: nextStatus }).eq('id', id)
   }
 
   async function handleLogout() {
@@ -236,7 +259,7 @@ export default function Page() {
           {tab === 'transactions' && <Transactions categories={categoryItems} activeCategory={activeCategory} setActiveCategory={setActiveCategory} filtered={filtered} onDelete={deleteTransaction} />}
           {tab === 'receivables' && <Receivables receivables={receivables} toggleStatus={toggleReceivableStatus} pendingTotal={pendingTotal} openModal={() => setIsReceivableModalOpen(true)} />}
           {tab === 'reports' && <Reports income={income} expense={expense} />}
-          {tab === 'vehicles' && <Vehicles vehiclePlates={vehiclePlates} vehicles={vehicles} openModal={() => setIsVehicleModalOpen(true)} />}
+          {tab === 'vehicles' && <Vehicles vehicles={vehicles} onDeleteVehicle={deleteVehicle} openModal={() => setIsVehicleModalOpen(true)} />}
         </section>
       </div>
 
@@ -281,15 +304,15 @@ function Transactions({ categories, activeCategory, setActiveCategory, filtered,
 }
 
 function Receivables({ receivables, toggleStatus, pendingTotal, openModal }: any) { 
-  return <section className="mt-2"><div className="flex items-end justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d64526]">Cari alacaklar defteri</p><h2 className="mt-1 text-2xl font-extrabold">Alacaklar / Navlun Defteri</h2></div><button onClick={openModal} className="rounded-xl bg-[#d64526] px-4 py-3 text-xs font-extrabold text-white cursor-pointer"><Plus className="mr-1 inline size-4" /> Alacak ekle</button></div><div className="mt-5 rounded-2xl bg-[#122c4a] p-5 text-white"><p className="text-xs text-white/60">Tahsil edilmesi beklenen</p><p className="mt-1 text-3xl font-extrabold">₺{currency(pendingTotal)}</p></div><div className="mt-5 flex flex-col rounded-2xl border border-[#e5eaf0] bg-white px-4 shadow-sm">{receivables.length === 0 ? <p className="py-6 text-center text-xs text-[#8391a0]">Kayıtlı alacak bulunmuyor.</p> : receivables.map((item: Receivable) => <div key={item.id} className="flex items-center gap-3 border-b border-[#eef1f4] py-4 last:border-0"><div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#eef3f7] text-[#122c4a]"><WalletCards className="size-5" /></div><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{item.client}</p><p className="text-xs text-[#8391a0]">{item.route} · Vade: {item.due}</p></div><div className="text-right"><p className="text-sm font-extrabold">₺{currency(item.amount)}</p><button onClick={() => toggleStatus(item.id)} className={`mt-1 rounded-full px-3 py-1 text-[10px] font-bold cursor-pointer ${item.status === 'Bekliyor' ? 'bg-[#fff0ed] text-[#d64526]' : 'bg-[#eaf7ef] text-[#2c8750]'}`}>{item.status}</button></div></div>)}</div></section> 
+  return <section className="mt-2"><div className="flex items-end justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d64526]">Cari alacaklar defteri</p><h2 className="mt-1 text-2xl font-extrabold">Alacaklar / Navlun Defteri</h2></div><button onClick={openModal} className="rounded-xl bg-[#d64526] px-4 py-3 text-xs font-extrabold text-white cursor-pointer"><Plus className="mr-1 inline size-4" /> Alacak ekle</button></div><div className="mt-5 rounded-2xl bg-[#122c4a] p-5 text-white"><p className="text-xs text-white/60">Tahsil edilmesi beklenen</p><p className="mt-1 text-3xl font-extrabold">₺{currency(pendingTotal)}</p></div><div className="mt-5 flex flex-col rounded-2xl border border-[#e5eaf0] bg-white px-4 shadow-sm">{receivables.length === 0 ? <p className="py-6 text-center text-xs text-[#8391a0]">Kayıtlı alacak bulunmuyor.</p> : receivables.map((item: Receivable) => <div key={item.id} className="flex items-center gap-3 border-b border-[#eef1f4] py-4 last:border-0"><div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#eef3f7] text-[#122c4a]"><WalletCards className="size-5" /></div><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{item.client}</p><p className="text-xs text-[#8391a0]">{item.route} · Vade: {item.due || 'Belirtilmedi'}</p></div><div className="text-right"><p className="text-sm font-extrabold">₺{currency(item.amount)}</p><button onClick={() => toggleStatus(item.id, item.status)} className={`mt-1 rounded-full px-3 py-1 text-[10px] font-bold cursor-pointer ${item.status === 'Bekliyor' ? 'bg-[#fff0ed] text-[#d64526]' : 'bg-[#eaf7ef] text-[#2c8750]'}`}>{item.status}</button></div></div>)}</div></section> 
 }
 
 function Reports({ income, expense }: { income: number; expense: number }) { 
   return <section className="mt-2"><div className="flex items-end justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d64526]">Performans özeti</p><h2 className="mt-1 text-2xl font-extrabold">Gelişmiş Raporlar</h2></div><button onClick={() => window.print()} className="flex items-center gap-2 rounded-xl border border-[#e5eaf0] bg-white px-4 py-3 text-xs font-extrabold cursor-pointer"><Download className="size-4" /> Raporu İndir</button></div><div className="mt-5 grid gap-4 sm:grid-cols-2"><article className="rounded-2xl border border-[#e5eaf0] bg-white p-5"><h3 className="font-extrabold">Özet Bilanço</h3><div className="mt-4 space-y-3 text-sm"><div className="flex justify-between border-b pb-2"><span>Toplam Gelir</span><span className="font-extrabold text-[#d64526]">₺{currency(income)}</span></div><div className="flex justify-between border-b pb-2"><span>Toplam Gider</span><span className="font-extrabold text-[#122c4a]">₺{currency(expense)}</span></div><div className="flex justify-between pt-1 text-base font-extrabold"><span>Net Kâr</span><span className={income - expense >= 0 ? 'text-green-600' : 'text-red-600'}>₺{currency(income - expense)}</span></div></div></article></div></section> 
 }
 
-function Vehicles({ vehiclePlates, vehicles, openModal }: any) { 
-  return <section className="mt-2"><div className="flex items-end justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d64526]">Plaka yönetimi</p><h2 className="mt-1 text-2xl font-extrabold">Araçlar & Filo</h2></div><button onClick={openModal} className="rounded-xl bg-[#d64526] px-4 py-3 text-xs font-extrabold text-white cursor-pointer"><Plus className="mr-1 inline size-4" /> Araç Ekle</button></div><div className="mt-5 grid gap-3 sm:grid-cols-3">{vehicles.length === 0 ? <p className="text-xs text-[#8391a0]">Henüz kayıtlı araç yok.</p> : vehicles.map((v: any) => <div key={v.id} className="rounded-2xl border border-[#e5eaf0] bg-white p-4"><Truck className="size-5 text-[#d64526]" /><p className="mt-3 text-sm font-extrabold">{v.plate_number}</p></div>)}</div></section> 
+function Vehicles({ vehicles, onDeleteVehicle, openModal }: any) { 
+  return <section className="mt-2"><div className="flex items-end justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d64526]">Plaka yönetimi</p><h2 className="mt-1 text-2xl font-extrabold">Araçlar & Filo</h2></div><button onClick={openModal} className="rounded-xl bg-[#d64526] px-4 py-3 text-xs font-extrabold text-white cursor-pointer"><Plus className="mr-1 inline size-4" /> Araç Ekle</button></div><div className="mt-5 grid gap-3 sm:grid-cols-3">{vehicles.length === 0 ? <p className="text-xs text-[#8391a0]">Henüz kayıtlı araç yok.</p> : vehicles.map((v: any) => <div key={v.id} className="group relative flex items-center justify-between rounded-2xl border border-[#e5eaf0] bg-white p-4 shadow-sm"><div><Truck className="size-5 text-[#d64526]" /><p className="mt-3 text-sm font-extrabold">{v.plate_number}</p></div><button onClick={() => onDeleteVehicle(v.id)} className="rounded-lg p-2 text-[#8391a0] hover:bg-red-50 hover:text-red-600 cursor-pointer" title="Aracı Sil"><Trash2 className="size-4" /></button></div>)}</div></section> 
 }
 
 function Modal({ type, amount, setAmount, category, setCategory, note, setNote, liters, setLiters, km, setKm, onSubmit, close }: any) { 
