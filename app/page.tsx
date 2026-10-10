@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 
 type Tab = 'overview' | 'transactions' | 'receivables' | 'reports' | 'vehicles'
-type Transaction = { id: string; type: 'income' | 'expense'; category: string; title: string; detail: string; date: string; amount: number; vehicle: string; liters?: number; km?: number; icon: typeof Fuel }
+type Transaction = { id: string; type: 'income' | 'expense'; category: string; title: string; detail: string; amount: number; vehicle: string; liters?: number; km?: number; icon: typeof Fuel }
 type Receivable = { id: string; client: string; route: string; due: string; amount: number; status: 'Bekliyor' | 'Ödendi' }
 type Profile = { full_name: string; phone: string }
 type Vehicle = { id: string; plate_number: string }
@@ -33,7 +33,6 @@ const parseNumeric = (val: string) => {
   return Number(val.toString().replace(/\./g, '').replace(/\D/g, '')) || 0
 }
 
-// Metinleri nizami baş harfleri büyük yapma (Türkçe karakter uyumlu)
 const titleCase = (str: string) => {
   if (!str) return ''
   return str
@@ -55,12 +54,10 @@ export default function Page() {
   const [receivables, setReceivables] = useState<Receivable[]>([])
   const [activeCategory, setActiveCategory] = useState('Tümü')
 
-  // Modals
   const [modalType, setModalType] = useState<'income' | 'expense' | null>(null)
   const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false)
   const [isReceivableModalOpen, setIsReceivableModalOpen] = useState(false)
 
-  // Form Fields
   const [amount, setAmount] = useState('')
   const [note, setNote] = useState('')
   const [category, setCategory] = useState('Mazot')
@@ -112,7 +109,6 @@ export default function Page() {
   const expense = useMemo(() => transactions.filter((item) => item.type === 'expense' && (vehicleFilter === 'Tüm araçlar' || item.vehicle === vehicleFilter)).reduce((sum, item) => sum + item.amount, 0), [transactions, vehicleFilter])
   const pendingTotal = receivables.filter((item) => item.status === 'Bekliyor').reduce((sum, item) => sum + Number(item.amount), 0)
 
-  // Yeni İşlem Ekle (Gelir/Gider)
   async function addTransaction(e: React.FormEvent) {
     e.preventDefault()
     if (!userId) return
@@ -130,7 +126,6 @@ export default function Page() {
       category: isIncome ? 'Nakliye Bedeli' : category,
       title: titleCase(note) || (isIncome ? 'Yeni Nakliye Geliri' : category),
       detail: !isIncome && category === 'Mazot' && liters ? `${liters} Litre${km ? ` · ${km} KM` : ''}` : isIncome ? 'Gelir Kaydı' : 'Gider Kaydı',
-      date: 'Bugün',
       amount: parsed,
       vehicle: selectedVehicle,
       liters: parseNumeric(liters) || null,
@@ -157,7 +152,6 @@ export default function Page() {
     await supabase.from('transactions').delete().eq('id', id)
   }
 
-  // Yeni Araç Ekle
   async function addVehicle(e: React.FormEvent) {
     e.preventDefault()
     const formattedPlate = newPlate.trim().toUpperCase()
@@ -184,7 +178,6 @@ export default function Page() {
     await supabase.from('vehicles').delete().eq('id', id)
   }
 
-  // Alacak Ekleme
   async function addReceivable(e: React.FormEvent) {
     e.preventDefault()
     if (!userId) return
@@ -198,7 +191,7 @@ export default function Page() {
       user_id: userId,
       client: titleCase(clientName),
       route: titleCase(routeDesc) || 'Nakliye Rotası',
-      due: titleCase(dueDate) || null,
+      due: dueDate || null,
       amount: parsed,
       status: 'Bekliyor'
     }
@@ -216,7 +209,6 @@ export default function Page() {
     }
   }
 
-  // Alacak Durumu Değiştirme (Ödendi olunca otomatik Gelire ekler)
   async function toggleReceivableStatus(item: Receivable) {
     const nextStatus = item.status === 'Bekliyor' ? 'Ödendi' : 'Bekliyor'
     
@@ -231,7 +223,6 @@ export default function Page() {
         category: 'Nakliye Bedeli',
         title: `${titleCase(item.client)} (Tahsilat)`,
         detail: `Alacak tahsili: ${titleCase(item.route)}`,
-        date: 'Bugün',
         amount: item.amount,
         vehicle: selectedVehicle
       }
@@ -354,7 +345,7 @@ function Overview({ income, expense, pendingTotal, setTab, setModalType, categor
 }
 
 function Transactions({ categories, activeCategory, setActiveCategory, filtered, onDelete, compact = false }: any) { 
-  return <section className={`${compact ? 'mt-8' : 'mt-2'} rounded-2xl border border-[#e5eaf0] bg-white p-4 shadow-sm sm:p-6`}><div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#8391a0]">Finans hareketleri</p><h2 className="mt-1 text-lg font-extrabold">İşlem geçmişi</h2></div></div><div className="scrollbar-hide mt-5 flex gap-2 overflow-x-auto pb-1">{categories.map(({ label, icon: Icon }: any) => <button key={label} onClick={() => setActiveCategory(label)} className={`flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold cursor-pointer ${activeCategory === label ? 'border-[#122c4a] bg-[#122c4a] text-white' : 'border-[#e5eaf0] bg-white text-[#536579]'}`}><Icon className="size-4" />{label}</button>)}</div><div className="mt-3 flex flex-col">{filtered.length === 0 ? <p className="py-6 text-center text-xs text-[#8391a0]">Henüz işlem kaydı bulunmuyor.</p> : filtered.map((item: Transaction) => { const Icon = item.icon || Fuel; return <div key={item.id} className="group flex items-center gap-3 border-t border-[#eef1f4] py-4 first:border-t-0"><div className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${item.type === 'income' ? 'bg-[#fff0ed] text-[#d64526]' : 'bg-[#eef3f7] text-[#122c4a]'}`}><Icon className="size-[18px]" /></div><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="truncate text-sm font-bold">{titleCase(item.title)}</p><span className="hidden rounded-full bg-[#f0f3f6] px-2 py-0.5 text-[9px] font-bold sm:inline-flex">{item.vehicle}</span></div><p className="mt-0.5 truncate text-xs text-[#8391a0]">{titleCase(item.detail)} · {item.date}</p></div><p className={`text-sm font-extrabold ${item.type === 'income' ? 'text-[#d64526]' : 'text-[#122c4a]'}`}>{item.type === 'income' ? '+' : '-'}₺{currency(item.amount)}</p><button onClick={() => onDelete(item.id)} className="hidden rounded-md p-1.5 text-[#8391a0] hover:bg-[#f5f7fa] group-hover:block cursor-pointer"><Trash2 className="size-3.5" /></button></div> })}</div></section> 
+  return <section className={`${compact ? 'mt-8' : 'mt-2'} rounded-2xl border border-[#e5eaf0] bg-white p-4 shadow-sm sm:p-6`}><div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#8391a0]">Finans hareketleri</p><h2 className="mt-1 text-lg font-extrabold">İşlem geçmişi</h2></div></div><div className="scrollbar-hide mt-5 flex gap-2 overflow-x-auto pb-1">{categories.map(({ label, icon: Icon }: any) => <button key={label} onClick={() => setActiveCategory(label)} className={`flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold cursor-pointer ${activeCategory === label ? 'border-[#122c4a] bg-[#122c4a] text-white' : 'border-[#e5eaf0] bg-white text-[#536579]'}`}><Icon className="size-4" />{label}</button>)}</div><div className="mt-3 flex flex-col">{filtered.length === 0 ? <p className="py-6 text-center text-xs text-[#8391a0]">Henüz işlem kaydı bulunmuyor.</p> : filtered.map((item: Transaction) => { const Icon = item.icon || Fuel; return <div key={item.id} className="group flex items-center gap-3 border-t border-[#eef1f4] py-4 first:border-t-0"><div className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${item.type === 'income' ? 'bg-[#fff0ed] text-[#d64526]' : 'bg-[#eef3f7] text-[#122c4a]'}`}><Icon className="size-[18px]" /></div><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="truncate text-sm font-bold">{titleCase(item.title)}</p><span className="hidden rounded-full bg-[#f0f3f6] px-2 py-0.5 text-[9px] font-bold sm:inline-flex">{item.vehicle}</span></div><p className="mt-0.5 truncate text-xs text-[#8391a0]">{titleCase(item.detail)}</p></div><p className={`text-sm font-extrabold ${item.type === 'income' ? 'text-[#d64526]' : 'text-[#122c4a]'}`}>{item.type === 'income' ? '+' : '-'}₺{currency(item.amount)}</p><button onClick={() => onDelete(item.id)} className="hidden rounded-md p-1.5 text-[#8391a0] hover:bg-[#f5f7fa] group-hover:block cursor-pointer"><Trash2 className="size-3.5" /></button></div> })}</div></section> 
 }
 
 function Receivables({ receivables, toggleStatus, pendingTotal, openModal }: any) { 
