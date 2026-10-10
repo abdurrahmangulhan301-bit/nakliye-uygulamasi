@@ -33,12 +33,29 @@ const parseNumeric = (val: string) => {
   return Number(val.toString().replace(/\./g, '').replace(/\D/g, '')) || 0
 }
 
+// Türkçe nizami büyük/küçük harf dönüştürücü
 const titleCase = (str: string) => {
   if (!str) return ''
   return str
     .trim()
     .split(' ')
-    .map((word) => word.charAt(0).toLocaleUpperCase('tr-TR') + word.slice(1).toLocaleLowerCase('tr-TR'))
+    .map((word) => {
+      if (!word) return ''
+      // Özel parantez içi veya ekleri koru
+      let cleanWord = word
+      let prefix = ''
+      let suffix = ''
+      if (cleanWord.startsWith('(')) { prefix = '('; cleanWord = cleanWord.slice(1); }
+      if (cleanWord.endsWith(')')) { suffix = ')'; cleanWord = cleanWord.slice(0, -1); }
+
+      const firstChar = cleanWord.charAt(0)
+      const rest = cleanWord.slice(1)
+
+      const capitalizedFirst = firstChar === 'i' || firstChar === 'İ' ? 'İ' : firstChar.toLocaleUpperCase('tr-TR')
+      const lowerRest = rest.replace(/İ/g, 'i').replace(/I/g, 'ı').toLocaleLowerCase('tr-TR')
+
+      return `${prefix}${capitalizedFirst}${lowerRest}${suffix}`
+    })
     .join(' ')
 }
 
@@ -112,7 +129,6 @@ export default function Page() {
   const expense = useMemo(() => transactions.filter((item) => item.type === 'expense' && (vehicleFilter === 'Tüm araçlar' || item.vehicle === vehicleFilter)).reduce((sum, item) => sum + item.amount, 0), [transactions, vehicleFilter])
   const pendingTotal = receivables.filter((item) => item.status === 'Bekliyor').reduce((sum, item) => sum + Number(item.amount), 0)
 
-  // Yeni İşlem Ekle
   async function addTransaction(e: React.FormEvent) {
     e.preventDefault()
     if (!userId) return
@@ -124,7 +140,6 @@ export default function Page() {
     const isIncome = modalType === 'income'
     const selectedVehicleObj = vehicles.find(v => v.plate_number === vehicleFilter) || vehicles[0]
 
-    // Veritabanı ile tam uyumlu payload
     const payload = {
       user_id: userId,
       vehicle_id: selectedVehicleObj?.id || null,
@@ -230,7 +245,7 @@ export default function Page() {
         type: 'income',
         category: 'Nakliye Bedeli',
         title: `${titleCase(item.client)} (Tahsilat)`,
-        detail: `Alacak tahsili: ${titleCase(item.route)}`,
+        detail: `Alacak Tahsili: ${titleCase(item.route)}`,
         date: 'Bugün',
         amount: item.amount
       }
@@ -267,45 +282,45 @@ export default function Page() {
   ]
 
   return (
-    <main className="min-h-screen bg-[#f5f7fa] text-[#122c4a]">
+    <main className="min-h-screen bg-[#f5f7fa] font-sans text-[#122c4a]">
       <div className="mx-auto flex min-h-screen max-w-[1440px]">
         <aside className="hidden w-[248px] shrink-0 flex-col border-r border-[#e5eaf0] bg-white px-5 py-7 lg:flex">
           <Brand />
-          <nav className="mt-12 flex flex-col gap-2">
+          <nav className="mt-10 flex flex-col gap-1.5">
             {nav.map(({ id, label, icon: Icon }) => (
               <NavButton key={id} active={tab === id} onClick={() => setTab(id as Tab)} icon={Icon}>{label}</NavButton>
             ))}
           </nav>
-          <div className="mt-auto rounded-2xl bg-[#122c4a] p-4 text-white">
-            <p className="text-xs font-semibold text-white/60">Bekleyen navlun</p>
-            <p className="mt-2 text-2xl font-extrabold">₺{currency(pendingTotal)}</p>
+          <div className="mt-auto rounded-2xl bg-[#122c4a] p-4 text-white shadow-sm">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-white/60">Bekleyen Navlun</p>
+            <p className="mt-1.5 text-2xl font-black">₺{currency(pendingTotal)}</p>
           </div>
-          <div className="mt-5 flex items-center gap-3 border-t border-[#e5eaf0] pt-5">
-            <div className="flex size-9 items-center justify-center rounded-full bg-[#e7edf2] text-sm font-bold">{initials}</div>
+          <div className="mt-5 flex items-center gap-3 border-t border-[#e5eaf0] pt-4">
+            <div className="flex size-9 items-center justify-center rounded-full bg-[#e7edf2] text-xs font-black text-[#122c4a]">{initials}</div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-bold">{profile?.full_name ? titleCase(profile.full_name) : 'Kullanıcı'}</p>
-              <p className="truncate text-[11px] text-[#8391a0]">{vehiclePlates[0] || 'Plaka Yok'}</p>
+              <p className="truncate text-xs font-extrabold leading-tight">{profile?.full_name ? titleCase(profile.full_name) : 'Kullanıcı'}</p>
+              <p className="truncate text-[10px] font-semibold text-[#8391a0]">{vehiclePlates[0] || 'Plaka Yok'}</p>
             </div>
-            <button onClick={handleLogout} className="p-1 text-[#8391a0] hover:text-red-600 cursor-pointer" title="Çıkış"><LogOut className="size-4" /></button>
+            <button onClick={handleLogout} className="p-1.5 text-[#8391a0] hover:text-red-600 transition-colors cursor-pointer" title="Çıkış"><LogOut className="size-4" /></button>
           </div>
         </aside>
 
         <section className="min-w-0 flex-1 px-4 pb-24 sm:px-7 lg:px-10 lg:pb-8">
           <header className="flex items-center justify-between py-5 sm:py-7">
             <div>
-              <p className="text-xs font-semibold text-[#8391a0]">Hoş Geldiniz</p>
-              <h1 className="mt-1 text-[24px] font-extrabold tracking-tight sm:text-[30px]">Günaydın, {firstName}</h1>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-[#8391a0]">Hoş Geldiniz</p>
+              <h1 className="mt-0.5 text-2xl font-black tracking-tight sm:text-3xl">Günaydın, {firstName}</h1>
             </div>
             <div className="flex items-center gap-3">
-              <label className="hidden items-center gap-2 rounded-xl border border-[#e5eaf0] bg-white px-3 py-2 text-xs font-bold sm:flex">
+              <label className="hidden items-center gap-2 rounded-xl border border-[#e5eaf0] bg-white px-3.5 py-2 text-xs font-bold shadow-sm sm:flex cursor-pointer">
                 <Truck className="size-4 text-[#d64526]" />
-                <select value={vehicleFilter} onChange={(e) => setVehicleFilter(e.target.value)} className="bg-transparent outline-none">
+                <select value={vehicleFilter} onChange={(e) => setVehicleFilter(e.target.value)} className="bg-transparent outline-none cursor-pointer font-bold">
                   <option>Tüm araçlar</option>
                   {vehiclePlates.map((v) => <option key={v}>{v}</option>)}
                 </select>
-                <ChevronDown className="size-3.5" />
+                <ChevronDown className="size-3.5 text-[#8391a0]" />
               </label>
-              <button onClick={handleLogout} className="flex size-10 items-center justify-center rounded-full bg-white text-[#8391a0] shadow-sm hover:text-red-600 cursor-pointer"><LogOut className="size-[18px]" /></button>
+              <button onClick={handleLogout} className="flex size-10 items-center justify-center rounded-full bg-white text-[#8391a0] shadow-sm hover:text-red-600 transition-colors cursor-pointer"><LogOut className="size-[18px]" /></button>
             </div>
           </header>
 
@@ -319,7 +334,7 @@ export default function Page() {
 
       <nav className="fixed inset-x-3 bottom-3 z-30 flex justify-around rounded-2xl border border-[#e5eaf0] bg-white/95 p-2 shadow-xl backdrop-blur lg:hidden">
         {nav.map(({ id, label, icon: Icon }) => (
-          <button key={id} onClick={() => setTab(id as Tab)} className={`flex min-w-0 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] font-bold ${tab === id ? 'bg-[#122c4a] text-white' : 'text-[#8391a0]'}`}>
+          <button key={id} onClick={() => setTab(id as Tab)} className={`flex min-w-0 flex-col items-center gap-1 rounded-xl px-2.5 py-2 text-[10px] font-bold ${tab === id ? 'bg-[#122c4a] text-white' : 'text-[#8391a0]'}`}>
             <Icon className="size-4" />{label}
           </button>
         ))}
@@ -334,27 +349,79 @@ export default function Page() {
 
 function Brand() { 
   return (
-    <div className="flex items-center gap-3 px-2">
-      <div className="flex size-10 items-center justify-center rounded-xl bg-[#122c4a] text-white shadow-lg"><ShipWheel className="size-5" /></div>
-      <div><p className="text-[15px] font-extrabold tracking-tight">Nakliye Cepte <span className="text-[#d64526]">Finans</span></p><p className="text-[10px] font-medium uppercase tracking-[0.18em] text-[#8391a0]">Sürücü Paneli</p></div>
+    <div className="flex items-center gap-3 px-1">
+      <div className="flex size-10 items-center justify-center rounded-xl bg-[#122c4a] text-white shadow-md"><ShipWheel className="size-5" /></div>
+      <div><p className="text-[15px] font-black tracking-tight leading-tight">Nakliye Cepte <span className="text-[#d64526]">Finans</span></p><p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#8391a0]">Sürücü Paneli</p></div>
     </div>
   ) 
 }
 
 function NavButton({ active, onClick, icon: Icon, children }: { active: boolean; onClick: () => void; icon: typeof LayoutDashboard; children: string }) { 
-  return <button onClick={onClick} className={`flex items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-bold cursor-pointer ${active ? 'bg-[#eef3f7] text-[#122c4a]' : 'text-[#8391a0] hover:bg-[#f5f7fa]'}`}><Icon className="size-[18px]" />{children}</button> 
+  return <button onClick={onClick} className={`flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-xs font-extrabold transition-all cursor-pointer ${active ? 'bg-[#eef3f7] text-[#122c4a]' : 'text-[#8391a0] hover:bg-[#f5f7fa] hover:text-[#122c4a]'}`}><Icon className="size-[18px]" />{children}</button> 
 }
 
 function SummaryCard({ label, value, icon: Icon, highlighted, expense }: { label: string; value: number; icon: typeof CircleDollarSign; highlighted?: boolean; expense?: boolean }) { 
-  return <article className={`rounded-2xl border p-5 shadow-sm ${highlighted ? 'border-[#122c4a] bg-[#122c4a] text-white' : 'border-[#e5eaf0] bg-white'}`}><div className="flex items-start justify-between"><div><p className={`text-xs font-bold ${highlighted ? 'text-white/65' : 'text-[#8391a0]'}`}>{label}</p><p className="mt-2 text-[25px] font-extrabold">₺{currency(value)}</p></div><div className={`flex size-9 items-center justify-center rounded-xl ${highlighted ? 'bg-white/10 text-[#ff9b83]' : expense ? 'bg-[#eef3f7] text-[#122c4a]' : 'bg-[#fff0ed] text-[#d64526]'}`}><Icon className="size-[18px]" /></div></div></article> 
+  return <article className={`rounded-2xl border p-5 shadow-sm transition-all ${highlighted ? 'border-[#122c4a] bg-[#122c4a] text-white' : 'border-[#e5eaf0] bg-white'}`}><div className="flex items-start justify-between"><div><p className={`text-xs font-extrabold uppercase tracking-wider ${highlighted ? 'text-white/70' : 'text-[#8391a0]'}`}>{label}</p><p className="mt-2 text-2xl font-black sm:text-3xl">₺{currency(value)}</p></div><div className={`flex size-10 items-center justify-center rounded-xl ${highlighted ? 'bg-white/10 text-[#ff9b83]' : expense ? 'bg-[#eef3f7] text-[#122c4a]' : 'bg-[#fff0ed] text-[#d64526]'}`}><Icon className="size-5" /></div></div></article> 
 }
 
 function Overview({ income, expense, pendingTotal, setTab, setModalType, categories, activeCategory, setActiveCategory, filtered, onDelete }: any) { 
-  return <><div className="grid gap-4 sm:grid-cols-3"><SummaryCard label="Net Kâr" value={income - expense} highlighted icon={CircleDollarSign} /><SummaryCard label="Toplam Gelir" value={income} icon={ArrowDownLeft} /><SummaryCard label="Toplam Gider" value={expense} icon={ArrowUpRight} expense /></div><div className="mt-6 grid gap-4 sm:grid-cols-3"><button onClick={() => setModalType('income')} className="flex h-14 items-center justify-center gap-3 rounded-2xl bg-[#d64526] px-5 text-sm font-extrabold text-white shadow-lg shadow-[#d64526]/20 cursor-pointer"><Plus className="size-5" /> Gelir Ekle</button><button onClick={() => setModalType('expense')} className="flex h-14 items-center justify-center gap-3 rounded-2xl bg-[#122c4a] px-5 text-sm font-extrabold text-white shadow-lg cursor-pointer"><Plus className="size-5" /> Gider Ekle</button><button onClick={() => setTab('receivables')} className="flex h-14 items-center justify-center gap-3 rounded-2xl border border-[#e5eaf0] bg-white px-5 text-sm font-extrabold text-[#122c4a] cursor-pointer"><WalletCards className="size-5 text-[#d64526]" /> ₺{currency(pendingTotal)} alacak</button></div><Transactions categories={categories} activeCategory={activeCategory} setActiveCategory={setActiveCategory} filtered={filtered} onDelete={onDelete} compact /></> 
+  return <><div className="grid gap-4 sm:grid-cols-3"><SummaryCard label="Net Kâr" value={income - expense} highlighted icon={CircleDollarSign} /><SummaryCard label="Toplam Gelir" value={income} icon={ArrowDownLeft} /><SummaryCard label="Toplam Gider" value={expense} icon={ArrowUpRight} expense /></div><div className="mt-5 grid gap-4 sm:grid-cols-3"><button onClick={() => setModalType('income')} className="flex h-13 items-center justify-center gap-2.5 rounded-2xl bg-[#d64526] px-5 text-xs font-black text-white shadow-md shadow-[#d64526]/20 hover:bg-[#be3a1f] transition-all cursor-pointer"><Plus className="size-4" /> Gelir Ekle</button><button onClick={() => setModalType('expense')} className="flex h-13 items-center justify-center gap-2.5 rounded-2xl bg-[#122c4a] px-5 text-xs font-black text-white shadow-md hover:bg-[#0d223a] transition-all cursor-pointer"><Plus className="size-4" /> Gider Ekle</button><button onClick={() => setTab('receivables')} className="flex h-13 items-center justify-center gap-2.5 rounded-2xl border border-[#e5eaf0] bg-white px-5 text-xs font-black text-[#122c4a] shadow-sm hover:bg-[#f8fafb] transition-all cursor-pointer"><WalletCards className="size-4 text-[#d64526]" /> ₺{currency(pendingTotal)} Alacak</button></div><Transactions categories={categories} activeCategory={activeCategory} setActiveCategory={setActiveCategory} filtered={filtered} onDelete={onDelete} compact /></> 
 }
 
 function Transactions({ categories, activeCategory, setActiveCategory, filtered, onDelete, compact = false }: any) { 
-  return <section className={`${compact ? 'mt-8' : 'mt-2'} rounded-2xl border border-[#e5eaf0] bg-white p-4 shadow-sm sm:p-6`}><div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#8391a0]">Finans hareketleri</p><h2 className="mt-1 text-lg font-extrabold">İşlem geçmişi</h2></div></div><div className="scrollbar-hide mt-5 flex gap-2 overflow-x-auto pb-1">{categories.map(({ label, icon: Icon }: any) => <button key={label} onClick={() => setActiveCategory(label)} className={`flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold cursor-pointer ${activeCategory === label ? 'border-[#122c4a] bg-[#122c4a] text-white' : 'border-[#e5eaf0] bg-white text-[#536579]'}`}><Icon className="size-4" />{label}</button>)}</div><div className="mt-3 flex flex-col">{filtered.length === 0 ? <p className="py-6 text-center text-xs text-[#8391a0]">Henüz işlem kaydı bulunmuyor.</p> : filtered.map((item: Transaction) => { const Icon = item.icon || Fuel; return <div key={item.id} className="group flex items-center gap-3 border-t border-[#eef1f4] py-4 first:border-t-0"><div className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${item.type === 'income' ? 'bg-[#fff0ed] text-[#d64526]' : 'bg-[#eef3f7] text-[#122c4a]'}`}><Icon className="size-[18px]" /></div><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="truncate text-sm font-bold">{titleCase(item.title)}</p><span className="hidden rounded-full bg-[#f0f3f6] px-2 py-0.5 text-[9px] font-bold sm:inline-flex">{item.vehicle}</span></div><p className="mt-0.5 truncate text-xs text-[#8391a0]">{titleCase(item.detail)}</p></div><p className={`text-sm font-extrabold ${item.type === 'income' ? 'text-[#d64526]' : 'text-[#122c4a]'}`}>{item.type === 'income' ? '+' : '-'}₺{currency(item.amount)}</p><button onClick={() => onDelete(item.id)} className="hidden rounded-md p-1.5 text-[#8391a0] hover:bg-[#f5f7fa] group-hover:block cursor-pointer"><Trash2 className="size-3.5" /></button></div> })}</div></section> 
+  return (
+    <section className={`${compact ? 'mt-7' : 'mt-2'} rounded-2xl border border-[#e5eaf0] bg-white p-5 shadow-sm sm:p-6`}>
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-[11px] font-extrabold uppercase tracking-wider text-[#8391a0]">Finans Hareketleri</p>
+          <h2 className="mt-0.5 text-base font-black sm:text-lg">İşlem Geçmişi</h2>
+        </div>
+      </div>
+      
+      <div className="scrollbar-hide mt-4 flex gap-2 overflow-x-auto pb-1">
+        {categories.map(({ label, icon: Icon }: any) => (
+          <button key={label} onClick={() => setActiveCategory(label)} className={`flex shrink-0 items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-bold transition-all cursor-pointer ${activeCategory === label ? 'border-[#122c4a] bg-[#122c4a] text-white shadow-sm' : 'border-[#e5eaf0] bg-white text-[#536579] hover:bg-[#f8fafb]'}`}>
+            <Icon className="size-3.5" />{label}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-4 flex flex-col">
+        {filtered.length === 0 ? (
+          <p className="py-8 text-center text-xs font-bold text-[#8391a0]">Henüz işlem kaydı bulunmuyor.</p>
+        ) : (
+          filtered.map((item: Transaction) => { 
+            const Icon = item.icon || Fuel; 
+            return (
+              <div key={item.id} className="group flex items-center justify-between gap-4 border-t border-[#f0f3f6] py-3.5 first:border-t-0">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${item.type === 'income' ? 'bg-[#fff0ed] text-[#d64526]' : 'bg-[#eef3f7] text-[#122c4a]'}`}>
+                    <Icon className="size-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-xs font-black text-[#122c4a] sm:text-sm">{titleCase(item.title)}</p>
+                      <span className="shrink-0 rounded-md bg-[#f0f3f6] px-2 py-0.5 text-[10px] font-extrabold text-[#536579]">{item.vehicle}</span>
+                    </div>
+                    <p className="mt-0.5 truncate text-[11px] font-semibold text-[#8391a0]">{titleCase(item.detail)}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 shrink-0">
+                  <p className={`text-xs font-black sm:text-sm ${item.type === 'income' ? 'text-[#d64526]' : 'text-[#122c4a]'}`}>
+                    {item.type === 'income' ? '+' : '-'}₺{currency(item.amount)}
+                  </p>
+                  <button onClick={() => onDelete(item.id)} className="rounded-lg p-1.5 text-[#a0aec0] opacity-0 group-hover:opacity-100 hover:bg-red-50 hover:text-red-600 transition-all cursor-pointer" title="Sil">
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </div>
+              </div> 
+            )
+          })
+        )}
+      </div>
+    </section> 
+  )
 }
 
 function Receivables({ receivables, toggleStatus, pendingTotal, openModal }: any) { 
@@ -365,37 +432,50 @@ function Receivables({ receivables, toggleStatus, pendingTotal, openModal }: any
     <section className="mt-2">
       <div className="flex items-end justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d64526]">Cari alacaklar defteri</p>
-          <h2 className="mt-1 text-2xl font-extrabold">Alacaklar / Navlun Defteri</h2>
+          <p className="text-[11px] font-extrabold uppercase tracking-wider text-[#d64526]">Cari Alacaklar Defteri</p>
+          <h2 className="mt-0.5 text-xl font-black sm:text-2xl">Alacaklar / Navlun Defteri</h2>
         </div>
-        <button onClick={openModal} className="rounded-xl bg-[#d64526] px-4 py-3 text-xs font-extrabold text-white cursor-pointer"><Plus className="mr-1 inline size-4" /> Alacak ekle</button>
+        <button onClick={openModal} className="flex items-center gap-2 rounded-xl bg-[#d64526] px-4 py-2.5 text-xs font-black text-white shadow-md hover:bg-[#be3a1f] transition-all cursor-pointer">
+          <Plus className="size-4" /> Alacak Ekle
+        </button>
       </div>
 
-      <div className="mt-5 rounded-2xl bg-[#122c4a] p-5 text-white">
-        <p className="text-xs text-white/60">Tahsil edilmesi beklenen toplam</p>
-        <p className="mt-1 text-3xl font-extrabold">₺{currency(pendingTotal)}</p>
+      <div className="mt-5 rounded-2xl bg-[#122c4a] p-5 text-white shadow-sm">
+        <p className="text-xs font-extrabold uppercase tracking-wider text-white/60">Tahsil Edilmesi Beklenen Toplam</p>
+        <p className="mt-1 text-2xl font-black sm:text-3xl">₺{currency(pendingTotal)}</p>
       </div>
 
       <div className="mt-5 flex gap-2">
         {(['Tümü', 'Bekliyor', 'Ödendi'] as const).map((f) => (
-          <button key={f} onClick={() => setFilter(f)} className={`rounded-xl border px-3 py-1.5 text-xs font-bold cursor-pointer ${filter === f ? 'border-[#122c4a] bg-[#122c4a] text-white' : 'border-[#e5eaf0] bg-white text-[#536579]'}`}>{f}</button>
+          <button key={f} onClick={() => setFilter(f)} className={`rounded-xl border px-3.5 py-1.5 text-xs font-extrabold transition-all cursor-pointer ${filter === f ? 'border-[#122c4a] bg-[#122c4a] text-white shadow-sm' : 'border-[#e5eaf0] bg-white text-[#536579] hover:bg-[#f8fafb]'}`}>{f}</button>
         ))}
       </div>
 
-      <div className="mt-3 flex flex-col rounded-2xl border border-[#e5eaf0] bg-white px-4 shadow-sm">
-        {filteredRecs.length === 0 ? <p className="py-6 text-center text-xs text-[#8391a0]">Kayıtlı alacak bulunmuyor.</p> : filteredRecs.map((item: Receivable) => (
-          <div key={item.id} className="flex items-center gap-3 border-b border-[#eef1f4] py-4 last:border-0">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#eef3f7] text-[#122c4a]"><WalletCards className="size-5" /></div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-bold">{titleCase(item.client)}</p>
-              <p className="text-xs text-[#8391a0]">{titleCase(item.route)} · Vade: {titleCase(item.due) || 'Belirtilmedi'}</p>
+      <div className="mt-3 flex flex-col rounded-2xl border border-[#e5eaf0] bg-white px-5 shadow-sm">
+        {filteredRecs.length === 0 ? (
+          <p className="py-8 text-center text-xs font-bold text-[#8391a0]">Kayıtlı alacak bulunmuyor.</p>
+        ) : (
+          filteredRecs.map((item: Receivable) => (
+            <div key={item.id} className="flex items-center justify-between gap-4 border-b border-[#f0f3f6] py-4 last:border-0">
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#eef3f7] text-[#122c4a]">
+                  <WalletCards className="size-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-black text-[#122c4a] sm:text-sm">{titleCase(item.client)}</p>
+                  <p className="mt-0.5 truncate text-[11px] font-semibold text-[#8391a0]">{titleCase(item.route)} · Vade: {titleCase(item.due) || 'Belirtilmedi'}</p>
+                </div>
+              </div>
+
+              <div className="text-right shrink-0">
+                <p className="text-xs font-black sm:text-sm">₺{currency(item.amount)}</p>
+                <button onClick={() => toggleStatus(item)} className={`mt-1 rounded-full px-3 py-0.5 text-[10px] font-black transition-all cursor-pointer ${item.status === 'Bekliyor' ? 'bg-[#fff0ed] text-[#d64526] hover:bg-[#fddbd3]' : 'bg-[#eaf7ef] text-[#2c8750] hover:bg-[#d5f0e0]'}`}>
+                  {item.status}
+                </button>
+              </div>
             </div>
-            <div className="text-right">
-              <p className="text-sm font-extrabold">₺{currency(item.amount)}</p>
-              <button onClick={() => toggleStatus(item)} className={`mt-1 rounded-full px-3 py-1 text-[10px] font-bold cursor-pointer ${item.status === 'Bekliyor' ? 'bg-[#fff0ed] text-[#d64526]' : 'bg-[#eaf7ef] text-[#2c8750]'}`}>{item.status}</button>
-            </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </section>
   )
@@ -416,30 +496,30 @@ function Reports({ transactions, vehicleFilter, income, expense }: { transaction
     <section className="mt-2">
       <div className="flex items-end justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d64526]">Performans özeti</p>
-          <h2 className="mt-1 text-2xl font-extrabold">Gelişmiş Raporlar</h2>
+          <p className="text-[11px] font-extrabold uppercase tracking-wider text-[#d64526]">Performans Özeti</p>
+          <h2 className="mt-0.5 text-xl font-black sm:text-2xl">Gelişmiş Raporlar</h2>
         </div>
-        <button onClick={() => window.print()} className="flex items-center gap-2 rounded-xl border border-[#e5eaf0] bg-white px-4 py-3 text-xs font-extrabold cursor-pointer"><Download className="size-4" /> Raporu İndir</button>
+        <button onClick={() => window.print()} className="flex items-center gap-2 rounded-xl border border-[#e5eaf0] bg-white px-4 py-2.5 text-xs font-black shadow-sm hover:bg-[#f8fafb] transition-all cursor-pointer"><Download className="size-4" /> Raporu İndir</button>
       </div>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
         <article className="rounded-2xl border border-[#e5eaf0] bg-white p-5 shadow-sm">
-          <h3 className="font-extrabold">Özet Bilanço ({vehicleFilter})</h3>
-          <div className="mt-4 space-y-3 text-sm">
-            <div className="flex justify-between border-b pb-2"><span>Toplam Gelir</span><span className="font-extrabold text-[#d64526]">₺{currency(income)}</span></div>
-            <div className="flex justify-between border-b pb-2"><span>Toplam Gider</span><span className="font-extrabold text-[#122c4a]">₺{currency(expense)}</span></div>
-            <div className="flex justify-between pt-1 text-base font-extrabold"><span>Net Kâr</span><span className={income - expense >= 0 ? 'text-green-600' : 'text-red-600'}>₺{currency(income - expense)}</span></div>
+          <h3 className="text-sm font-black text-[#122c4a]">Özet Bilanço ({vehicleFilter})</h3>
+          <div className="mt-4 space-y-3 text-xs font-bold">
+            <div className="flex justify-between border-b border-[#f0f3f6] pb-2"><span>Toplam Gelir</span><span className="font-black text-[#d64526]">₺{currency(income)}</span></div>
+            <div className="flex justify-between border-b border-[#f0f3f6] pb-2"><span>Toplam Gider</span><span className="font-black text-[#122c4a]">₺{currency(expense)}</span></div>
+            <div className="flex justify-between pt-1 text-sm font-black"><span>Net Kâr</span><span className={income - expense >= 0 ? 'text-green-600' : 'text-red-600'}>₺{currency(income - expense)}</span></div>
           </div>
         </article>
 
         <article className="rounded-2xl border border-[#e5eaf0] bg-white p-5 shadow-sm">
-          <h3 className="font-extrabold">Gider Dağılımı</h3>
+          <h3 className="text-sm font-black text-[#122c4a]">Gider Dağılımı</h3>
           <div className="mt-4 space-y-3">
-            {Object.keys(categoryTotals).length === 0 ? <p className="text-xs text-[#8391a0]">Henüz gider kaydı yok.</p> : Object.entries(categoryTotals).map(([cat, amt]) => {
+            {Object.keys(categoryTotals).length === 0 ? <p className="text-xs font-bold text-[#8391a0]">Henüz gider kaydı yok.</p> : Object.entries(categoryTotals).map(([cat, amt]) => {
               const pct = expense > 0 ? Math.round((amt / expense) * 100) : 0
               return (
                 <div key={cat} className="space-y-1">
-                  <div className="flex justify-between text-xs font-bold">
+                  <div className="flex justify-between text-xs font-extrabold">
                     <span>{cat}</span>
                     <span>₺{currency(amt)} (%{pct})</span>
                   </div>
@@ -457,7 +537,7 @@ function Reports({ transactions, vehicleFilter, income, expense }: { transaction
 }
 
 function Vehicles({ vehicles, onDeleteVehicle, openModal }: any) { 
-  return <section className="mt-2"><div className="flex items-end justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d64526]">Plaka yönetimi</p><h2 className="mt-1 text-2xl font-extrabold">Araçlar & Filo</h2></div><button onClick={openModal} className="rounded-xl bg-[#d64526] px-4 py-3 text-xs font-extrabold text-white cursor-pointer"><Plus className="mr-1 inline size-4" /> Araç Ekle</button></div><div className="mt-5 grid gap-3 sm:grid-cols-3">{vehicles.length === 0 ? <p className="text-xs text-[#8391a0]">Henüz kayıtlı araç yok.</p> : vehicles.map((v: any) => <div key={v.id} className="group relative flex items-center justify-between rounded-2xl border border-[#e5eaf0] bg-white p-4 shadow-sm"><div><Truck className="size-5 text-[#d64526]" /><p className="mt-3 text-sm font-extrabold">{v.plate_number}</p></div><button onClick={() => onDeleteVehicle(v.id)} className="rounded-lg p-2 text-[#8391a0] hover:bg-red-50 hover:text-red-600 cursor-pointer" title="Aracı Sil"><Trash2 className="size-4" /></button></div>)}</div></section> 
+  return <section className="mt-2"><div className="flex items-end justify-between"><div><p className="text-[11px] font-extrabold uppercase tracking-wider text-[#d64526]">Plaka Yönetimi</p><h2 className="mt-0.5 text-xl font-black sm:text-2xl">Araçlar & Filo</h2></div><button onClick={openModal} className="flex items-center gap-2 rounded-xl bg-[#d64526] px-4 py-2.5 text-xs font-black text-white shadow-md hover:bg-[#be3a1f] transition-all cursor-pointer"><Plus className="size-4" /> Araç Ekle</button></div><div className="mt-5 grid gap-3 sm:grid-cols-3">{vehicles.length === 0 ? <p className="text-xs font-bold text-[#8391a0]">Henüz kayıtlı araç yok.</p> : vehicles.map((v: any) => <div key={v.id} className="group relative flex items-center justify-between rounded-2xl border border-[#e5eaf0] bg-white p-4 shadow-sm"><div><Truck className="size-5 text-[#d64526]" /><p className="mt-2.5 text-sm font-black">{v.plate_number}</p></div><button onClick={() => onDeleteVehicle(v.id)} className="rounded-lg p-2 text-[#8391a0] hover:bg-red-50 hover:text-red-600 transition-all cursor-pointer" title="Aracı Sil"><Trash2 className="size-4" /></button></div>)}</div></section> 
 }
 
 function Modal({ type, amount, setAmount, category, setCategory, note, setNote, liters, setLiters, km, setKm, onSubmit, close }: any) { 
@@ -466,13 +546,13 @@ function Modal({ type, amount, setAmount, category, setCategory, note, setNote, 
       <div className="w-full max-w-md rounded-t-3xl bg-white p-6 shadow-2xl sm:rounded-3xl">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d64526]">Yeni kayıt</p>
-            <h2 className="mt-1 text-xl font-extrabold">{type === 'income' ? 'Gelir Ekle' : 'Gider Ekle'}</h2>
+            <p className="text-[11px] font-extrabold uppercase tracking-wider text-[#d64526]">Yeni Kayıt</p>
+            <h2 className="mt-0.5 text-lg font-black">{type === 'income' ? 'Gelir Ekle' : 'Gider Ekle'}</h2>
           </div>
-          <button onClick={close} className="rounded-full bg-[#f5f5f5] p-2 text-[#8391a0] cursor-pointer"><X className="size-4" /></button>
+          <button onClick={close} className="rounded-full bg-[#f5f7fa] p-2 text-[#8391a0] hover:bg-[#eef3f7] transition-all cursor-pointer"><X className="size-4" /></button>
         </div>
-        <form onSubmit={onSubmit} className="mt-6 flex flex-col gap-4">
-          <label className="flex flex-col gap-2 text-xs font-bold text-[#536579]">
+        <form onSubmit={onSubmit} className="mt-5 flex flex-col gap-3.5">
+          <label className="flex flex-col gap-1.5 text-xs font-extrabold text-[#536579]">
             Tutar (₺)
             <input 
               required 
@@ -480,14 +560,14 @@ function Modal({ type, amount, setAmount, category, setCategory, note, setNote, 
               value={amount} 
               onChange={(e) => setAmount(formatNumberInput(e.target.value))} 
               placeholder="20.000" 
-              className="h-12 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-base font-bold outline-none focus:border-[#d64526]" 
+              className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-sm font-extrabold outline-none focus:border-[#d64526] focus:bg-white transition-all" 
             />
           </label>
 
           {type === 'expense' && (
-            <label className="flex flex-col gap-2 text-xs font-bold text-[#536579]">
+            <label className="flex flex-col gap-1.5 text-xs font-extrabold text-[#536579]">
               Kategori
-              <select value={category} onChange={(e) => setCategory(e.target.value)} className="h-12 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-sm font-bold outline-none focus:border-[#d64526]">
+              <select value={category} onChange={(e) => setCategory(e.target.value)} className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-xs font-extrabold outline-none focus:border-[#d64526] focus:bg-white transition-all cursor-pointer">
                 <option>Mazot</option>
                 <option>Köprü & Otoyol</option>
                 <option>Bakım & Servis</option>
@@ -499,35 +579,35 @@ function Modal({ type, amount, setAmount, category, setCategory, note, setNote, 
 
           {type === 'expense' && category === 'Mazot' && (
             <div className="grid grid-cols-2 gap-3">
-              <label className="flex flex-col gap-2 text-xs font-bold text-[#536579]">
+              <label className="flex flex-col gap-1.5 text-xs font-extrabold text-[#536579]">
                 Litre
                 <input 
                   inputMode="numeric" 
                   value={liters} 
                   onChange={(e) => setLiters(formatNumberInput(e.target.value))} 
                   placeholder="238" 
-                  className="h-12 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 font-bold outline-none focus:border-[#d64526]" 
+                  className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 font-extrabold outline-none focus:border-[#d64526] focus:bg-white transition-all" 
                 />
               </label>
-              <label className="flex flex-col gap-2 text-xs font-bold text-[#536579]">
+              <label className="flex flex-col gap-1.5 text-xs font-extrabold text-[#536579]">
                 Kilometre
                 <input 
                   inputMode="numeric" 
                   value={km} 
                   onChange={(e) => setKm(formatNumberInput(e.target.value))} 
                   placeholder="1.420" 
-                  className="h-12 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 font-bold outline-none focus:border-[#d64526]" 
+                  className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 font-extrabold outline-none focus:border-[#d64526] focus:bg-white transition-all" 
                 />
               </label>
             </div>
           )}
 
-          <label className="flex flex-col gap-2 text-xs font-bold text-[#536579]">
+          <label className="flex flex-col gap-1.5 text-xs font-extrabold text-[#536579]">
             Not / Açıklama
-            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="İstasyon veya rota" className="h-12 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 font-bold outline-none focus:border-[#d64526]" />
+            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="İstasyon veya rota" className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-xs font-extrabold outline-none focus:border-[#d64526] focus:bg-white transition-all" />
           </label>
 
-          <button type="submit" className="mt-2 h-12 rounded-xl bg-[#d64526] text-sm font-extrabold text-white shadow-lg cursor-pointer">Kaydet</button>
+          <button type="submit" className="mt-2 h-11 rounded-xl bg-[#d64526] text-xs font-black text-white shadow-md hover:bg-[#be3a1f] transition-all cursor-pointer">Kaydet</button>
         </form>
       </div>
     </div>
@@ -535,7 +615,7 @@ function Modal({ type, amount, setAmount, category, setCategory, note, setNote, 
 }
 
 function VehicleModal({ onSubmit, close, newPlate, setNewPlate }: any) {
-  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#122c4a]/45 p-4 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) close() }}><div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl"><div className="flex justify-between items-center"><h2 className="text-lg font-extrabold">Yeni Araç Ekle</h2><button onClick={close} className="p-2 text-[#8391a0]"><X className="size-4" /></button></div><form onSubmit={onSubmit} className="mt-4 flex flex-col gap-3"><input required value={newPlate} onChange={(e) => setNewPlate(e.target.value)} placeholder="Örn: 34 ABC 123" className="h-12 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 font-bold outline-none uppercase" /><button type="submit" className="h-12 rounded-xl bg-[#122c4a] text-sm font-extrabold text-white">Plakayı Kaydet</button></form></div></div>
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#122c4a]/45 p-4 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) close() }}><div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl"><div className="flex justify-between items-center"><h2 className="text-base font-black">Yeni Araç Ekle</h2><button onClick={close} className="p-1.5 text-[#8391a0] hover:bg-[#f5f7fa] rounded-full transition-all"><X className="size-4" /></button></div><form onSubmit={onSubmit} className="mt-4 flex flex-col gap-3"><input required value={newPlate} onChange={(e) => setNewPlate(e.target.value)} placeholder="Örn: 34 ABC 123" className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-xs font-extrabold outline-none uppercase focus:border-[#122c4a]" /><button type="submit" className="h-11 rounded-xl bg-[#122c4a] text-xs font-black text-white shadow-md">Plakayı Kaydet</button></form></div></div>
 }
 
 function ReceivableModal({ onSubmit, close, clientName, setClientName, routeDesc, setRouteDesc, recAmount, setRecAmount, dueDate, setDueDate }: any) {
@@ -543,22 +623,22 @@ function ReceivableModal({ onSubmit, close, clientName, setClientName, routeDesc
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#122c4a]/45 p-4 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) close() }}>
       <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
         <div className="flex justify-between items-center">
-          <h2 className="text-lg font-extrabold">Yeni Alacak Ekle</h2>
-          <button onClick={close} className="p-2 text-[#8391a0]"><X className="size-4" /></button>
+          <h2 className="text-base font-black">Yeni Alacak Ekle</h2>
+          <button onClick={close} className="p-1.5 text-[#8391a0] hover:bg-[#f5f7fa] rounded-full transition-all"><X className="size-4" /></button>
         </div>
         <form onSubmit={onSubmit} className="mt-4 flex flex-col gap-3">
-          <input required value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Müşteri / Firma Adı" className="h-12 rounded-xl border px-4 font-bold outline-none" />
-          <input value={routeDesc} onChange={(e) => setRouteDesc(e.target.value)} placeholder="Rota (Örn: Konya → Ankara)" className="h-12 rounded-xl border px-4 font-bold outline-none" />
+          <input required value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Müşteri / Firma Adı" className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-xs font-extrabold outline-none focus:border-[#d64526]" />
+          <input value={routeDesc} onChange={(e) => setRouteDesc(e.target.value)} placeholder="Rota (Örn: Ilgın → Beypazarı)" className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-xs font-extrabold outline-none focus:border-[#d64526]" />
           <input 
             required 
             inputMode="numeric" 
             value={recAmount} 
             onChange={(e) => setRecAmount(formatNumberInput(e.target.value))} 
             placeholder="Tutar (₺)" 
-            className="h-12 rounded-xl border px-4 font-bold outline-none" 
+            className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-xs font-extrabold outline-none focus:border-[#d64526]" 
           />
-          <input value={dueDate} onChange={(e) => setDueDate(e.target.value)} placeholder="Vade Tarihi (Örn: 20 Haziran)" className="h-12 rounded-xl border px-4 font-bold outline-none" />
-          <button type="submit" className="h-12 rounded-xl bg-[#d64526] text-sm font-extrabold text-white">Alacağı Kaydet</button>
+          <input value={dueDate} onChange={(e) => setDueDate(e.target.value)} placeholder="Vade Tarihi (Örn: 2026-10-10)" className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-xs font-extrabold outline-none focus:border-[#d64526]" />
+          <button type="submit" className="h-11 rounded-xl bg-[#d64526] text-xs font-black text-white shadow-md hover:bg-[#be3a1f] transition-all">Alacağı Kaydet</button>
         </form>
       </div>
     </div>
