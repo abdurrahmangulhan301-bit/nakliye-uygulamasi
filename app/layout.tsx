@@ -3,9 +3,10 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'YolCüzdan — Nakliye Finans Takibi',
-  description: 'Truck driver and transport professional finance tracking dashboard.',
+  title: 'Nakliye Cepte Finans',
+  description: 'Sürücü ve nakliye profesyonelleri için finans takip paneli.',
   generator: 'v0.app',
+  manifest: '/manifest.json',
   icons: {
     icon: [
       {
