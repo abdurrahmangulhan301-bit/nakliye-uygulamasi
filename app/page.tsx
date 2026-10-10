@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import {
   ArrowDownLeft, ArrowUpRight, BarChart3, ChevronDown, CircleDollarSign,
   ClipboardList, Fuel, LayoutDashboard, Plus, Receipt, Route,
-  ShipWheel, Trash2, Truck, Utensils, Wrench, X, Gauge, WalletCards, Download, LogOut, Check
+  ShipWheel, Trash2, Truck, Utensils, Wrench, X, Gauge, WalletCards, Download, LogOut
 } from 'lucide-react'
 
 type Tab = 'overview' | 'transactions' | 'receivables' | 'reports' | 'vehicles'
@@ -126,6 +126,7 @@ export default function Page() {
       category: isIncome ? 'Nakliye Bedeli' : category,
       title: titleCase(note) || (isIncome ? 'Yeni Nakliye Geliri' : category),
       detail: !isIncome && category === 'Mazot' && liters ? `${liters} Litre${km ? ` · ${km} KM` : ''}` : isIncome ? 'Gelir Kaydı' : 'Gider Kaydı',
+      date: 'Bugün',
       amount: parsed,
       vehicle: selectedVehicle,
       liters: parseNumeric(liters) || null,
@@ -223,6 +224,7 @@ export default function Page() {
         category: 'Nakliye Bedeli',
         title: `${titleCase(item.client)} (Tahsilat)`,
         detail: `Alacak tahsili: ${titleCase(item.route)}`,
+        date: 'Bugün',
         amount: item.amount,
         vehicle: selectedVehicle
       }
