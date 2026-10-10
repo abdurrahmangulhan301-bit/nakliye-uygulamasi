@@ -22,6 +22,13 @@ const categoryItems = [
 
 const currency = (amount: number) => new Intl.NumberFormat('tr-TR').format(amount)
 
+// Sayı girdilerini binlik ayraçlı (noktalı) formata dönüştüren yardımcı fonksiyon
+const formatNumberInput = (val: string) => {
+  const digitsOnly = val.replace(/\D/g, '')
+  if (!digitsOnly) return ''
+  return new Intl.NumberFormat('tr-TR').format(Number(digitsOnly))
+}
+
 export default function Page() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
@@ -113,8 +120,8 @@ export default function Page() {
       date: 'Bugün',
       amount: parsed,
       vehicle: selectedVehicle,
-      liters: Number(liters) || null,
-      km: Number(km) || null
+      liters: Number(liters.replace(/\D/g, '')) || null,
+      km: Number(km.replace(/\D/g, '')) || null
     }
 
     const { data, error } = await supabase.from('transactions').insert([payload]).select().single()
@@ -132,13 +139,12 @@ export default function Page() {
     await supabase.from('transactions').delete().eq('id', id)
   }
 
-  // Yeni Araç Ekle (Mükerrer Kontrollü)
+  // Yeni Araç Ekle
   async function addVehicle(e: React.FormEvent) {
     e.preventDefault()
     const formattedPlate = newPlate.trim().toUpperCase()
     if (!userId || !formattedPlate) return
 
-    // İstemci tarafı kontrolü
     if (vehicles.some((v) => v.plate_number === formattedPlate)) {
       alert('Bu plaka zaten ekli!')
       return
@@ -154,7 +160,6 @@ export default function Page() {
     }
   }
 
-  // Araç Silme
   async function deleteVehicle(id: string) {
     if (!confirm('Bu aracı silmek istediğinize emin misiniz?')) return
     setVehicles((curr) => curr.filter((v) => v.id !== id))
@@ -185,7 +190,6 @@ export default function Page() {
     }
   }
 
-  // Alacak Durumu Değiştirme
   async function toggleReceivableStatus(id: string, currentStatus: string) {
     const nextStatus = currentStatus === 'Bekliyor' ? 'Ödendi' : 'Bekliyor'
     setReceivables((curr) => curr.map((r) => r.id === id ? { ...r, status: nextStatus as any } : r))
@@ -316,7 +320,77 @@ function Vehicles({ vehicles, onDeleteVehicle, openModal }: any) {
 }
 
 function Modal({ type, amount, setAmount, category, setCategory, note, setNote, liters, setLiters, km, setKm, onSubmit, close }: any) { 
-  return <div className="fixed inset-0 z-50 flex items-end justify-center bg-[#122c4a]/45 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={(e) => { if (e.target === e.currentTarget) close() }}><div className="w-full max-w-md rounded-t-3xl bg-white p-6 shadow-2xl sm:rounded-3xl"><div className="flex items-start justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d64526]">Yeni kayıt</p><h2 className="mt-1 text-xl font-extrabold">{type === 'income' ? 'Gelir Ekle' : 'Gider Ekle'}</h2></div><button onClick={close} className="rounded-full bg-[#f5f5f5] p-2 text-[#8391a0] cursor-pointer"><X className="size-4" /></button></div><form onSubmit={onSubmit} className="mt-6 flex flex-col gap-4"><label className="flex flex-col gap-2 text-xs font-bold text-[#536579]">Tutar (₺)<input required inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" className="h-12 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-base font-bold outline-none focus:border-[#d64526]" /></label>{type === 'expense' && <label className="flex flex-col gap-2 text-xs font-bold text-[#536579]">Kategori<select value={category} onChange={(e) => setCategory(e.target.value)} className="h-12 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-sm font-bold outline-none focus:border-[#d64526]"><option>Mazot</option><option>Köprü & Otoyol</option><option>Bakım & Servis</option><option>Yemek</option><option>Lastik</option></select></label>}{type === 'expense' && category === 'Mazot' && <div className="grid grid-cols-2 gap-3"><label className="flex flex-col gap-2 text-xs font-bold text-[#536579]">Litre<input inputMode="decimal" value={liters} onChange={(e) => setLiters(e.target.value)} placeholder="238" className="h-12 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 font-bold outline-none focus:border-[#d64526]" /></label><label className="flex flex-col gap-2 text-xs font-bold text-[#536579]">Kilometre<input inputMode="numeric" value={km} onChange={(e) => setKm(e.target.value)} placeholder="1420" className="h-12 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 font-bold outline-none focus:border-[#d64526]" /></label></div>}<label className="flex flex-col gap-2 text-xs font-bold text-[#536579]">Not / Açıklama<input value={note} onChange={(e) => setNote(e.target.value)} placeholder="İstasyon veya rota" className="h-12 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 font-bold outline-none focus:border-[#d64526]" /></label><button type="submit" className="mt-2 h-12 rounded-xl bg-[#d64526] text-sm font-extrabold text-white shadow-lg cursor-pointer">Kaydet</button></form></div></div> 
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-[#122c4a]/45 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={(e) => { if (e.target === e.currentTarget) close() }}>
+      <div className="w-full max-w-md rounded-t-3xl bg-white p-6 shadow-2xl sm:rounded-3xl">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d64526]">Yeni kayıt</p>
+            <h2 className="mt-1 text-xl font-extrabold">{type === 'income' ? 'Gelir Ekle' : 'Gider Ekle'}</h2>
+          </div>
+          <button onClick={close} className="rounded-full bg-[#f5f5f5] p-2 text-[#8391a0] cursor-pointer"><X className="size-4" /></button>
+        </div>
+        <form onSubmit={onSubmit} className="mt-6 flex flex-col gap-4">
+          <label className="flex flex-col gap-2 text-xs font-bold text-[#536579]">
+            Tutar (₺)
+            <input 
+              required 
+              inputMode="numeric" 
+              value={amount} 
+              onChange={(e) => setAmount(formatNumberInput(e.target.value))} 
+              placeholder="20.000" 
+              className="h-12 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-base font-bold outline-none focus:border-[#d64526]" 
+            />
+          </label>
+
+          {type === 'expense' && (
+            <label className="flex flex-col gap-2 text-xs font-bold text-[#536579]">
+              Kategori
+              <select value={category} onChange={(e) => setCategory(e.target.value)} className="h-12 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-sm font-bold outline-none focus:border-[#d64526]">
+                <option>Mazot</option>
+                <option>Köprü & Otoyol</option>
+                <option>Bakım & Servis</option>
+                <option>Yemek</option>
+                <option>Lastik</option>
+              </select>
+            </label>
+          )}
+
+          {type === 'expense' && category === 'Mazot' && (
+            <div className="grid grid-cols-2 gap-3">
+              <label className="flex flex-col gap-2 text-xs font-bold text-[#536579]">
+                Litre
+                <input 
+                  inputMode="numeric" 
+                  value={liters} 
+                  onChange={(e) => setLiters(formatNumberInput(e.target.value))} 
+                  placeholder="238" 
+                  className="h-12 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 font-bold outline-none focus:border-[#d64526]" 
+                />
+              </label>
+              <label className="flex flex-col gap-2 text-xs font-bold text-[#536579]">
+                Kilometre
+                <input 
+                  inputMode="numeric" 
+                  value={km} 
+                  onChange={(e) => setKm(formatNumberInput(e.target.value))} 
+                  placeholder="1.420" 
+                  className="h-12 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 font-bold outline-none focus:border-[#d64526]" 
+                />
+              </label>
+            </div>
+          )}
+
+          <label className="flex flex-col gap-2 text-xs font-bold text-[#536579]">
+            Not / Açıklama
+            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="İstasyon veya rota" className="h-12 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 font-bold outline-none focus:border-[#d64526]" />
+          </label>
+
+          <button type="submit" className="mt-2 h-12 rounded-xl bg-[#d64526] text-sm font-extrabold text-white shadow-lg cursor-pointer">Kaydet</button>
+        </form>
+      </div>
+    </div>
+  ) 
 }
 
 function VehicleModal({ onSubmit, close, newPlate, setNewPlate }: any) {
@@ -324,5 +398,28 @@ function VehicleModal({ onSubmit, close, newPlate, setNewPlate }: any) {
 }
 
 function ReceivableModal({ onSubmit, close, clientName, setClientName, routeDesc, setRouteDesc, recAmount, setRecAmount, dueDate, setDueDate }: any) {
-  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#122c4a]/45 p-4 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) close() }}><div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl"><div className="flex justify-between items-center"><h2 className="text-lg font-extrabold">Yeni Alacak Ekle</h2><button onClick={close} className="p-2 text-[#8391a0]"><X className="size-4" /></button></div><form onSubmit={onSubmit} className="mt-4 flex flex-col gap-3"><input required value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Müşteri / Firma Adı" className="h-12 rounded-xl border px-4 font-bold outline-none" /><input value={routeDesc} onChange={(e) => setRouteDesc(e.target.value)} placeholder="Rota (Örn: Konya → Ankara)" className="h-12 rounded-xl border px-4 font-bold outline-none" /><input required inputMode="numeric" value={recAmount} onChange={(e) => setRecAmount(e.target.value)} placeholder="Tutar (₺)" className="h-12 rounded-xl border px-4 font-bold outline-none" /><input value={dueDate} onChange={(e) => setDueDate(e.target.value)} placeholder="Vade Tarihi (Örn: 20 Haziran)" className="h-12 rounded-xl border px-4 font-bold outline-none" /><button type="submit" className="h-12 rounded-xl bg-[#d64526] text-sm font-extrabold text-white">Alacağı Kaydet</button></form></div></div>
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#122c4a]/45 p-4 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) close() }}>
+      <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+        <div className="flex justify-between items-center">
+          <h2 className="text-lg font-extrabold">Yeni Alacak Ekle</h2>
+          <button onClick={close} className="p-2 text-[#8391a0]"><X className="size-4" /></button>
+        </div>
+        <form onSubmit={onSubmit} className="mt-4 flex flex-col gap-3">
+          <input required value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Müşteri / Firma Adı" className="h-12 rounded-xl border px-4 font-bold outline-none" />
+          <input value={routeDesc} onChange={(e) => setRouteDesc(e.target.value)} placeholder="Rota (Örn: Konya → Ankara)" className="h-12 rounded-xl border px-4 font-bold outline-none" />
+          <input 
+            required 
+            inputMode="numeric" 
+            value={recAmount} 
+            onChange={(e) => setRecAmount(formatNumberInput(e.target.value))} 
+            placeholder="Tutar (₺)" 
+            className="h-12 rounded-xl border px-4 font-bold outline-none" 
+          />
+          <input value={dueDate} onChange={(e) => setDueDate(e.target.value)} placeholder="Vade Tarihi (Örn: 20 Haziran)" className="h-12 rounded-xl border px-4 font-bold outline-none" />
+          <button type="submit" className="h-12 rounded-xl bg-[#d64526] text-sm font-extrabold text-white">Alacağı Kaydet</button>
+        </form>
+      </div>
+    </div>
+  )
 }
