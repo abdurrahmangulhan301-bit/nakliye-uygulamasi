@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import {
   ArrowDownLeft, ArrowUpRight, BarChart3, ChevronDown, CircleDollarSign,
   ClipboardList, Fuel, LayoutDashboard, Plus, Receipt, Route,
-  ShipWheel, Trash2, Truck, Utensils, Wrench, X, Gauge, WalletCards, Download, LogOut, Pencil, MessageSquare, Calendar, Tag, Phone
+  Trash2, Truck, Utensils, Wrench, X, Gauge, WalletCards, Download, LogOut, Pencil, MessageSquare, Calendar
 } from 'lucide-react'
 
 type Tab = 'overview' | 'transactions' | 'receivables' | 'reports' | 'vehicles'
@@ -466,8 +466,15 @@ export default function Page() {
 function Brand() { 
   return (
     <div className="flex items-center gap-3 px-1">
-      <div className="flex size-10 items-center justify-center rounded-xl bg-[#122c4a] text-white shadow-md"><ShipWheel className="size-5" /></div>
-      <div><p className="text-[15px] font-black tracking-tight leading-tight">Nakliye Cepte <span className="text-[#d64526]">Finans</span></p><p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#8391a0]">Sürücü Paneli</p></div>
+      <img src="/logot.png" alt="Nakliye Cepte Logo" className="size-10 object-contain rounded-xl" />
+      <div>
+        <p className="text-[15px] font-black tracking-tight leading-tight">
+          Nakliye Cepte <span className="text-[#d64526]">Finans</span>
+        </p>
+        <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#8391a0]">
+          Sürücü Paneli
+        </p>
+      </div>
     </div>
   ) 
 }
@@ -517,9 +524,6 @@ function Overview({ income, expense, pendingTotal, setTab, setModalType, categor
   )
 }
 
-/* =========================================================
-   GELİŞTİRİLMİŞ İŞLEM GEÇMİŞİ BÖLÜMÜ
-   ========================================================= */
 function Transactions({ categories, activeCategory, setActiveCategory, filtered, onDelete, onEdit, compact = false }: any) { 
   return (
     <section className={`${compact ? 'mt-7' : 'mt-2'} rounded-2xl border border-[#e5eaf0] bg-white p-5 shadow-sm sm:p-6`}>
@@ -555,19 +559,16 @@ function Transactions({ categories, activeCategory, setActiveCategory, filtered,
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="truncate text-xs font-black text-[#122c4a] sm:text-sm">{titleCase(item.title)}</p>
                       
-                      {/* Belirgin Plaka Rozeti */}
                       <span className="shrink-0 rounded-md bg-[#122c4a] px-2 py-0.5 text-[10px] font-black text-white shadow-2xs">
                         {item.vehicle}
                       </span>
                       
-                      {/* Belirgin Tarih Rozeti */}
                       <span className="shrink-0 flex items-center gap-1 rounded-md bg-[#fff0ed] px-2 py-0.5 text-[10px] font-black text-[#d64526] border border-[#fddbd3]">
                         <Calendar className="size-3" />
                         {formatDate(item.created_at)}
                       </span>
                     </div>
                     
-                    {/* Açıklama & Rota Detayı */}
                     <p className="mt-1 truncate text-[11px] font-extrabold text-[#4a5568]">{titleCase(item.detail)}</p>
                   </div>
                 </div>
