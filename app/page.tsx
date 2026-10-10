@@ -81,6 +81,7 @@ export default function Page() {
   const [category, setCategory] = useState('Mazot')
   const [liters, setLiters] = useState('')
   const [km, setKm] = useState('')
+  const [cargoWeight, setCargoWeight] = useState('')
   const [newPlate, setNewPlate] = useState('')
   const [clientName, setClientName] = useState('')
   const [routeDesc, setRouteDesc] = useState('')
@@ -164,13 +165,17 @@ export default function Page() {
     const isIncome = modalType === 'income' || editingTransaction?.type === 'income'
     const selectedVehicleObj = vehicles.find(v => v.plate_number === vehicleFilter) || vehicles[0]
 
+    const detailText = isIncome 
+      ? (cargoWeight ? `${cargoWeight} Ton Yük` : 'Gelir Kaydı')
+      : (category === 'Mazot' && liters ? `${liters} Litre${km ? ` · ${km} KM` : ''}` : 'Gider Kaydı')
+
     const payload = {
       user_id: userId,
       vehicle_id: selectedVehicleObj?.id || null,
       type: isIncome ? 'income' : 'expense',
       category: isIncome ? 'Nakliye Bedeli' : category,
       title: titleCase(note) || (isIncome ? 'Yeni Nakliye Geliri' : category),
-      detail: !isIncome && category === 'Mazot' && liters ? `${liters} Litre${km ? ` · ${km} KM` : ''}` : isIncome ? 'Gelir Kaydı' : 'Gider Kaydı',
+      detail: detailText,
       date: 'Bugün',
       amount: parsed,
       liters: parseNumeric(liters) || null,
@@ -204,7 +209,7 @@ export default function Page() {
   function closeTransactionModal() {
     setModalType(null)
     setEditingTransaction(null)
-    setAmount(''); setNote(''); setLiters(''); setKm('')
+    setAmount(''); setNote(''); setLiters(''); setKm(''); setCargoWeight('')
   }
 
   async function deleteTransaction(id: string) {
@@ -222,38 +227,46 @@ export default function Page() {
       return
     }
 
+    let finalRoute = titleCase(routeDesc) || 'Nakliye Rotası'
+    if (clientPhone.trim()) {
+      finalRoute += ` · Tel: ${clientPhone.trim()}`
+    }
+
     const payload = {
       user_id: userId,
       client: titleCase(clientName),
-      route: titleCase(routeDesc) || 'Nakliye Rotası',
+      route: finalRoute,
       due: dueDate || null,
       amount: parsed,
-      phone: clientPhone.trim() || null,
       status: editingReceivable ? editingReceivable.status : 'Bekliyor'
     }
 
     if (editingReceivable) {
       const { error } = await supabase.from('receivables').update(payload).eq('id', editingReceivable.id)
-      if (!error) {
-        setReceivables(curr => curr.map(r => r.id === editingReceivable.id ? { ...r, ...payload } : r))
+      if (error) {
+        alert('Hata oluştu: ' + error.message)
+      } else {
+        setReceivables(curr => curr.map(r => r.id === editingReceivable.id ? { ...r, ...payload, phone: clientPhone } : r))
+        closeReceivableModal()
       }
     } else {
       const { data, error } = await supabase.from('receivables').insert([payload]).select().single()
-      if (!error && data) {
-        setReceivables(curr => [data, ...curr])
+      if (error) {
+        alert('Alacak kaydedilirken hata oluştu: ' + error.message)
+      } else if (data) {
+        setReceivables(curr => [{ ...data, phone: clientPhone }, ...curr])
+        closeReceivableModal()
       }
     }
-
-    closeReceivableModal()
   }
 
-  function openEditReceivable(rec: Receivable & { phone?: string }) {
+  function openEditReceivable(rec: Receivable) {
     setEditingReceivable(rec)
     setClientName(rec.client)
-    setRouteDesc(rec.route)
+    setRouteDesc(rec.route.split(' · Tel:')[0] || rec.route)
     setRecAmount(currency(rec.amount))
     setDueDate(rec.due || '')
-    setClientPhone(rec.phone || '')
+    setClientPhone(rec.phone || (rec.route.includes('Tel:') ? rec.route.split('Tel:')[1].trim() : ''))
     setIsReceivableModalOpen(true)
   }
 
@@ -427,7 +440,7 @@ export default function Page() {
         ))}
       </nav>
 
-      {(modalType || editingTransaction) && <Modal type={modalType || editingTransaction?.type || 'income'} isEditing={!!editingTransaction} amount={amount} setAmount={setAmount} category={category} setCategory={setCategory} note={note} setNote={setNote} liters={liters} setLiters={setLiters} km={km} setKm={setKm} onSubmit={handleTransactionSubmit} close={closeTransactionModal} />}
+      {(modalType || editingTransaction) && <Modal type={modalType || editingTransaction?.type || 'income'} isEditing={!!editingTransaction} amount={amount} setAmount={setAmount} category={category} setCategory={setCategory} note={note} setNote={setNote} liters={liters} setLiters={setLiters} km={km} setKm={setKm} cargoWeight={cargoWeight} setCargoWeight={setCargoWeight} onSubmit={handleTransactionSubmit} close={closeTransactionModal} />}
       {isVehicleModalOpen && <VehicleModal onSubmit={addVehicle} close={() => setIsVehicleModalOpen(false)} newPlate={newPlate} setNewPlate={setNewPlate} />}
       {isReceivableModalOpen && <ReceivableModal isEditing={!!editingReceivable} onSubmit={handleReceivableSubmit} close={closeReceivableModal} clientName={clientName} setClientName={setClientName} routeDesc={routeDesc} setRouteDesc={setRouteDesc} recAmount={recAmount} setRecAmount={setRecAmount} dueDate={dueDate} setDueDate={setDueDate} clientPhone={clientPhone} setClientPhone={setClientPhone} />}
     </main>
@@ -552,9 +565,14 @@ function Receivables({ receivables, toggleStatus, pendingTotal, openModal, onEdi
   const [filter, setFilter] = useState<'Tümü' | 'Bekliyor' | 'Ödendi'>('Tümü')
   const filteredRecs = receivables.filter((r: Receivable) => filter === 'Tümü' || r.status === filter)
 
-  const sendWhatsAppMsg = (item: Receivable & { phone?: string }) => {
-    const text = `Sayın ${titleCase(item.client)}, ${titleCase(item.route)} rotasına ait ₺${currency(item.amount)} tutarındaki tahsilat bakiyenizin ödemesini hatırlatmak isteriz. İyi çalışmalar dileriz.`
-    const cleanPhone = item.phone ? item.phone.replace(/\D/g, '') : ''
+  const sendWhatsAppMsg = (item: Receivable) => {
+    const phoneMatch = item.route.match(/Tel:\s*([0-9]+)/)
+    const phoneNum = item.phone || (phoneMatch ? phoneMatch[1] : '')
+    const routeName = item.route.split(' · Tel:')[0]
+
+    const text = `Sayın ${titleCase(item.client)}, ${titleCase(routeName)} rotasına ait ₺${currency(item.amount)} tutarındaki alacak bakiyenizin ödemesini hatırlatmak isteriz. İyi çalışmalar dileriz.`
+    const cleanPhone = phoneNum ? phoneNum.replace(/\D/g, '') : ''
+    
     window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`, '_blank')
   }
 
@@ -585,7 +603,7 @@ function Receivables({ receivables, toggleStatus, pendingTotal, openModal, onEdi
         {filteredRecs.length === 0 ? (
           <p className="py-8 text-center text-xs font-bold text-[#8391a0]">Kayıtlı alacak bulunmuyor.</p>
         ) : (
-          filteredRecs.map((item: Receivable & { phone?: string }) => (
+          filteredRecs.map((item: Receivable) => (
             <div key={item.id} className="flex items-center justify-between gap-4 border-b border-[#f0f3f6] py-4 last:border-0">
               <div className="flex items-center gap-3.5 min-w-0">
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#eef3f7] text-[#122c4a]">
@@ -593,7 +611,7 @@ function Receivables({ receivables, toggleStatus, pendingTotal, openModal, onEdi
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-black text-[#122c4a] sm:text-sm">{titleCase(item.client)}</p>
-                  <p className="mt-0.5 truncate text-[11px] font-semibold text-[#8391a0]">{titleCase(item.route)} {item.phone ? `· 📞 ${item.phone}` : ''} · Vade: {titleCase(item.due) || 'Belirtilmedi'}</p>
+                  <p className="mt-0.5 truncate text-[11px] font-semibold text-[#8391a0]">{titleCase(item.route)} · Vade: {titleCase(item.due) || 'Belirtilmedi'}</p>
                 </div>
               </div>
 
@@ -709,14 +727,14 @@ function Vehicles({ vehicles, onDeleteVehicle, openModal }: any) {
   return <section className="mt-2"><div className="flex items-end justify-between"><div><p className="text-[11px] font-extrabold uppercase tracking-wider text-[#d64526]">Plaka Yönetimi</p><h2 className="mt-0.5 text-xl font-black sm:text-2xl">Araçlar & Filo</h2></div><button onClick={openModal} className="flex items-center gap-2 rounded-xl bg-[#d64526] px-4 py-2.5 text-xs font-black text-white shadow-md hover:bg-[#be3a1f] transition-all cursor-pointer"><Plus className="size-4" /> Araç Ekle</button></div><div className="mt-5 grid gap-3 sm:grid-cols-3">{vehicles.length === 0 ? <p className="text-xs font-bold text-[#8391a0]">Henüz kayıtlı araç yok.</p> : vehicles.map((v: any) => <div key={v.id} className="group relative flex items-center justify-between rounded-2xl border border-[#e5eaf0] bg-white p-4 shadow-sm"><div><Truck className="size-5 text-[#d64526]" /><p className="mt-2.5 text-sm font-black">{v.plate_number}</p></div><button onClick={() => onDeleteVehicle(v.id)} className="rounded-lg p-2 text-[#8391a0] hover:bg-red-50 hover:text-red-600 transition-all cursor-pointer" title="Aracı Sil"><Trash2 className="size-4" /></button></div>)}</div></section> 
 }
 
-function Modal({ type, isEditing, amount, setAmount, category, setCategory, note, setNote, liters, setLiters, km, setKm, onSubmit, close }: any) { 
+function Modal({ type, isEditing, amount, setAmount, category, setCategory, note, setNote, liters, setLiters, km, setKm, cargoWeight, setCargoWeight, onSubmit, close }: any) { 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-[#122c4a]/45 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={(e) => { if (e.target === e.currentTarget) close() }}>
       <div className="w-full max-w-md rounded-t-3xl bg-white p-6 shadow-2xl sm:rounded-3xl">
         <div className="flex items-start justify-between">
           <div>
             <p className="text-[11px] font-extrabold uppercase tracking-wider text-[#d64526]">{isEditing ? 'Düzenle' : 'Yeni Kayıt'}</p>
-            <h2 className="mt-0.5 text-lg font-black">{isEditing ? 'İşlemi Güncelle' : (type === 'income' ? 'Gelir Ekle' : 'Gider Ekle')}</h2>
+            <h2 className="mt-0.5 text-lg font-black">{isEditing ? 'İşlemi Güncelle' : (type === 'income' ? 'Gelir / Yük Ekle' : 'Gider Ekle')}</h2>
           </div>
           <button onClick={close} className="rounded-full bg-[#f5f7fa] p-2 text-[#8391a0] hover:bg-[#eef3f7] transition-all cursor-pointer"><X className="size-4" /></button>
         </div>
@@ -732,6 +750,19 @@ function Modal({ type, isEditing, amount, setAmount, category, setCategory, note
               className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-sm font-extrabold outline-none focus:border-[#d64526] focus:bg-white transition-all" 
             />
           </label>
+
+          {type === 'income' && (
+            <label className="flex flex-col gap-1.5 text-xs font-extrabold text-[#536579]">
+              Taşınan Yük Miktarı (Ton)
+              <input 
+                inputMode="numeric"
+                value={cargoWeight} 
+                onChange={(e) => setCargoWeight(e.target.value)} 
+                placeholder="Örn: 26 Ton Şeker" 
+                className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-xs font-extrabold outline-none focus:border-[#d64526] focus:bg-white transition-all" 
+              />
+            </label>
+          )}
 
           {type === 'expense' && (
             <label className="flex flex-col gap-1.5 text-xs font-extrabold text-[#536579]">
@@ -772,8 +803,8 @@ function Modal({ type, isEditing, amount, setAmount, category, setCategory, note
           )}
 
           <label className="flex flex-col gap-1.5 text-xs font-extrabold text-[#536579]">
-            Not / Açıklama
-            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="İstasyon veya rota" className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-xs font-extrabold outline-none focus:border-[#d64526] focus:bg-white transition-all" />
+            Not / Açıklama / Rota
+            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="İstasyon, rota veya firma adı" className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-xs font-extrabold outline-none focus:border-[#d64526] focus:bg-white transition-all" />
           </label>
 
           <button type="submit" className="mt-2 h-11 rounded-xl bg-[#d64526] text-xs font-black text-white shadow-md hover:bg-[#be3a1f] transition-all cursor-pointer">
@@ -798,19 +829,39 @@ function ReceivableModal({ isEditing, onSubmit, close, clientName, setClientName
           <button onClick={close} className="p-1.5 text-[#8391a0] hover:bg-[#f5f7fa] rounded-full transition-all"><X className="size-4" /></button>
         </div>
         <form onSubmit={onSubmit} className="mt-4 flex flex-col gap-3">
-          <input required value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Müşteri / Firma Adı" className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-xs font-extrabold outline-none focus:border-[#d64526]" />
-          <input value={routeDesc} onChange={(e) => setRouteDesc(e.target.value)} placeholder="Rota (Örn: Ilgın → Beypazarı)" className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-xs font-extrabold outline-none focus:border-[#d64526]" />
-          <input 
-            required 
-            inputMode="numeric" 
-            value={recAmount} 
-            onChange={(e) => setRecAmount(formatNumberInput(e.target.value))} 
-            placeholder="Tutar (₺)" 
-            className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-xs font-extrabold outline-none focus:border-[#d64526]" 
-          />
-          <input value={clientPhone} onChange={(e) => setClientPhone(e.target.value)} placeholder="Telefon Numarası (Örn: 5551234567)" className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-xs font-extrabold outline-none focus:border-[#d64526]" />
-          <input value={dueDate} onChange={(e) => setDueDate(e.target.value)} placeholder="Vade Tarihi (Örn: 2026-10-10)" className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-xs font-extrabold outline-none focus:border-[#d64526]" />
-          <button type="submit" className="h-11 rounded-xl bg-[#d64526] text-xs font-black text-white shadow-md hover:bg-[#be3a1f] transition-all">
+          <label className="flex flex-col gap-1 text-xs font-extrabold text-[#536579]">
+            Müşteri / Firma Adı
+            <input required value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Örn: Kooperatif" className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-xs font-extrabold outline-none focus:border-[#d64526]" />
+          </label>
+
+          <label className="flex flex-col gap-1 text-xs font-extrabold text-[#536579]">
+            Rota ve Yük Detayı
+            <input value={routeDesc} onChange={(e) => setRouteDesc(e.target.value)} placeholder="Örn: Ilgın → Beypazarı (28 Ton)" className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-xs font-extrabold outline-none focus:border-[#d64526]" />
+          </label>
+
+          <label className="flex flex-col gap-1 text-xs font-extrabold text-[#536579]">
+            Alacak Tutarı (₺)
+            <input 
+              required 
+              inputMode="numeric" 
+              value={recAmount} 
+              onChange={(e) => setRecAmount(formatNumberInput(e.target.value))} 
+              placeholder="35.000" 
+              className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-xs font-extrabold outline-none focus:border-[#d64526]" 
+            />
+          </label>
+
+          <label className="flex flex-col gap-1 text-xs font-extrabold text-[#536579]">
+            Müşteri Telefon Numarası (WhatsApp İçin)
+            <input value={clientPhone} onChange={(e) => setClientPhone(e.target.value)} placeholder="Örn: 05551234567" className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-xs font-extrabold outline-none focus:border-[#d64526]" />
+          </label>
+
+          <label className="flex flex-col gap-1 text-xs font-extrabold text-[#536579]">
+            Vade Tarihi
+            <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-xs font-extrabold outline-none focus:border-[#d64526] cursor-pointer" />
+          </label>
+
+          <button type="submit" className="mt-2 h-11 rounded-xl bg-[#d64526] text-xs font-black text-white shadow-md hover:bg-[#be3a1f] transition-all cursor-pointer">
             {isEditing ? 'Değişiklikleri Kaydet' : 'Alacağı Kaydet'}
           </button>
         </form>
