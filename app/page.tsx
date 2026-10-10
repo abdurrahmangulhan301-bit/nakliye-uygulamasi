@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import {
   ArrowDownLeft, ArrowUpRight, BarChart3, ChevronDown, CircleDollarSign,
   ClipboardList, Fuel, LayoutDashboard, Plus, Receipt, Route,
-  ShipWheel, Trash2, Truck, Utensils, Wrench, X, Gauge, WalletCards, Download, LogOut
+  ShipWheel, Trash2, Truck, Utensils, Wrench, X, Gauge, WalletCards, Download, LogOut, Pencil
 } from 'lucide-react'
 
 type Tab = 'overview' | 'transactions' | 'receivables' | 'reports' | 'vehicles'
@@ -33,7 +33,6 @@ const parseNumeric = (val: string) => {
   return Number(val.toString().replace(/\./g, '').replace(/\D/g, '')) || 0
 }
 
-// Türkçe nizami büyük/küçük harf dönüştürücü
 const titleCase = (str: string) => {
   if (!str) return ''
   return str
@@ -41,7 +40,6 @@ const titleCase = (str: string) => {
     .split(' ')
     .map((word) => {
       if (!word) return ''
-      // Özel parantez içi veya ekleri koru
       let cleanWord = word
       let prefix = ''
       let suffix = ''
@@ -71,10 +69,14 @@ export default function Page() {
   const [receivables, setReceivables] = useState<Receivable[]>([])
   const [activeCategory, setActiveCategory] = useState('Tümü')
 
+  // Modals & Editing
   const [modalType, setModalType] = useState<'income' | 'expense' | null>(null)
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
   const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false)
   const [isReceivableModalOpen, setIsReceivableModalOpen] = useState(false)
+  const [editingReceivable, setEditingReceivable] = useState<Receivable | null>(null)
 
+  // Form Fields
   const [amount, setAmount] = useState('')
   const [note, setNote] = useState('')
   const [category, setCategory] = useState('Mazot')
@@ -129,7 +131,8 @@ export default function Page() {
   const expense = useMemo(() => transactions.filter((item) => item.type === 'expense' && (vehicleFilter === 'Tüm araçlar' || item.vehicle === vehicleFilter)).reduce((sum, item) => sum + item.amount, 0), [transactions, vehicleFilter])
   const pendingTotal = receivables.filter((item) => item.status === 'Bekliyor').reduce((sum, item) => sum + Number(item.amount), 0)
 
-  async function addTransaction(e: React.FormEvent) {
+  // Gelir / Gider Ekle veya Düzenle
+  async function handleTransactionSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!userId) return
     const parsed = parseNumeric(amount)
@@ -137,7 +140,8 @@ export default function Page() {
       alert('Lütfen geçerli bir tutar girin!')
       return
     }
-    const isIncome = modalType === 'income'
+
+    const isIncome = modalType === 'income' || editingTransaction?.type === 'income'
     const selectedVehicleObj = vehicles.find(v => v.plate_number === vehicleFilter) || vehicles[0]
 
     const payload = {
@@ -153,54 +157,46 @@ export default function Page() {
       km: parseNumeric(km) || null
     }
 
-    const { data, error } = await supabase.from('transactions').insert([payload]).select().single()
-    if (error) {
-      alert('Hata oluştu: ' + error.message)
-      return
+    if (editingTransaction) {
+      // Güncelleme
+      const { error } = await supabase.from('transactions').update(payload).eq('id', editingTransaction.id)
+      if (!error) {
+        setTransactions(curr => curr.map(t => t.id === editingTransaction.id ? { ...t, ...payload, vehicle: selectedVehicleObj?.plate_number || '42DLB59' } : t))
+      }
+    } else {
+      // Yeni Ekleme
+      const { data, error } = await supabase.from('transactions').insert([payload]).select().single()
+      if (!error && data) {
+        setTransactions(curr => [{ ...data, vehicle: selectedVehicleObj?.plate_number || '42DLB59', icon: isIncome ? Truck : (categoryItems.find((item) => item.label === category)?.icon || Fuel) }, ...curr])
+      }
     }
 
-    if (data) {
-      setTransactions((curr) => [{
-        ...data,
-        vehicle: selectedVehicleObj?.plate_number || '42DLB59',
-        icon: isIncome ? Truck : (categoryItems.find((item) => item.label === category)?.icon || Fuel)
-      }, ...curr])
-    }
-    setAmount(''); setNote(''); setLiters(''); setKm(''); setModalType(null)
+    closeTransactionModal()
+  }
+
+  function openEditTransaction(tx: Transaction) {
+    setEditingTransaction(tx)
+    setAmount(currency(tx.amount))
+    setNote(tx.title)
+    setCategory(tx.category)
+    setLiters(tx.liters ? String(tx.liters) : '')
+    setKm(tx.km ? String(tx.km) : '')
+  }
+
+  function closeTransactionModal() {
+    setModalType(null)
+    setEditingTransaction(null)
+    setAmount(''); setNote(''); setLiters(''); setKm('')
   }
 
   async function deleteTransaction(id: string) {
+    if (!confirm('Bu işlemi silmek istediğinize emin misiniz?')) return
     setTransactions((curr) => curr.filter((t) => t.id !== id))
     await supabase.from('transactions').delete().eq('id', id)
   }
 
-  async function addVehicle(e: React.FormEvent) {
-    e.preventDefault()
-    const formattedPlate = newPlate.trim().toUpperCase()
-    if (!userId || !formattedPlate) return
-
-    if (vehicles.some((v) => v.plate_number === formattedPlate)) {
-      alert('Bu plaka zaten ekli!')
-      return
-    }
-
-    const { data, error } = await supabase.from('vehicles').insert([{ user_id: userId, plate_number: formattedPlate }]).select().single()
-    if (error) {
-      alert('Hata oluştu: ' + error.message)
-    } else if (data) {
-      setVehicles((curr) => [...curr, data])
-      setNewPlate('')
-      setIsVehicleModalOpen(false)
-    }
-  }
-
-  async function deleteVehicle(id: string) {
-    if (!confirm('Bu aracı silmek istediğinize emin misiniz?')) return
-    setVehicles((curr) => curr.filter((v) => v.id !== id))
-    await supabase.from('vehicles').delete().eq('id', id)
-  }
-
-  async function addReceivable(e: React.FormEvent) {
+  // Alacak Ekle veya Düzenle
+  async function handleReceivableSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!userId) return
     const parsed = parseNumeric(recAmount)
@@ -215,25 +211,47 @@ export default function Page() {
       route: titleCase(routeDesc) || 'Nakliye Rotası',
       due: dueDate || null,
       amount: parsed,
-      status: 'Bekliyor'
+      status: editingReceivable ? editingReceivable.status : 'Bekliyor'
     }
 
-    const { data, error } = await supabase.from('receivables').insert([payload]).select().single()
-    if (error) {
-      alert('Alacak eklenirken hata: ' + error.message)
-      return
+    if (editingReceivable) {
+      const { error } = await supabase.from('receivables').update(payload).eq('id', editingReceivable.id)
+      if (!error) {
+        setReceivables(curr => curr.map(r => r.id === editingReceivable.id ? { ...r, ...payload } : r))
+      }
+    } else {
+      const { data, error } = await supabase.from('receivables').insert([payload]).select().single()
+      if (!error && data) {
+        setReceivables(curr => [data, ...curr])
+      }
     }
 
-    if (data) {
-      setReceivables((curr) => [data, ...curr])
-      setClientName(''); setRouteDesc(''); setRecAmount(''); setDueDate('')
-      setIsReceivableModalOpen(false)
-    }
+    closeReceivableModal()
+  }
+
+  function openEditReceivable(rec: Receivable) {
+    setEditingReceivable(rec)
+    setClientName(rec.client)
+    setRouteDesc(rec.route)
+    setRecAmount(currency(rec.amount))
+    setDueDate(rec.due || '')
+    setIsReceivableModalOpen(true)
+  }
+
+  function closeReceivableModal() {
+    setIsReceivableModalOpen(false)
+    setEditingReceivable(null)
+    setClientName(''); setRouteDesc(''); setRecAmount(''); setDueDate('')
+  }
+
+  async function deleteReceivable(id: string) {
+    if (!confirm('Bu alacağı silmek istediğinize emin misiniz?')) return
+    setReceivables(curr => curr.filter(r => r.id !== id))
+    await supabase.from('receivables').delete().eq('id', id)
   }
 
   async function toggleReceivableStatus(item: Receivable) {
     const nextStatus = item.status === 'Bekliyor' ? 'Ödendi' : 'Bekliyor'
-    
     setReceivables((curr) => curr.map((r) => r.id === item.id ? { ...r, status: nextStatus } : r))
     await supabase.from('receivables').update({ status: nextStatus }).eq('id', item.id)
 
@@ -252,13 +270,33 @@ export default function Page() {
 
       const { data: newTx, error: txError } = await supabase.from('transactions').insert([incomePayload]).select().single()
       if (!txError && newTx) {
-        setTransactions((curr) => [{
-          ...newTx,
-          vehicle: selectedVehicleObj?.plate_number || '42DLB59',
-          icon: Truck
-        }, ...curr])
+        setTransactions((curr) => [{ ...newTx, vehicle: selectedVehicleObj?.plate_number || '42DLB59', icon: Truck }, ...curr])
       }
     }
+  }
+
+  async function addVehicle(e: React.FormEvent) {
+    e.preventDefault()
+    const formattedPlate = newPlate.trim().toUpperCase()
+    if (!userId || !formattedPlate) return
+
+    if (vehicles.some((v) => v.plate_number === formattedPlate)) {
+      alert('Bu plaka zaten ekli!')
+      return
+    }
+
+    const { data, error } = await supabase.from('vehicles').insert([{ user_id: userId, plate_number: formattedPlate }]).select().single()
+    if (!error && data) {
+      setVehicles((curr) => [...curr, data])
+      setNewPlate('')
+      setIsVehicleModalOpen(false)
+    }
+  }
+
+  async function deleteVehicle(id: string) {
+    if (!confirm('Bu aracı silmek istediğinize emin misiniz?')) return
+    setVehicles((curr) => curr.filter((v) => v.id !== id))
+    await supabase.from('vehicles').delete().eq('id', id)
   }
 
   async function handleLogout() {
@@ -324,9 +362,9 @@ export default function Page() {
             </div>
           </header>
 
-          {tab === 'overview' && <Overview income={income} expense={expense} pendingTotal={pendingTotal} setTab={setTab} setModalType={setModalType} categories={categoryItems} activeCategory={activeCategory} setActiveCategory={setActiveCategory} filtered={filtered} onDelete={deleteTransaction} />}
-          {tab === 'transactions' && <Transactions categories={categoryItems} activeCategory={activeCategory} setActiveCategory={setActiveCategory} filtered={filtered} onDelete={deleteTransaction} />}
-          {tab === 'receivables' && <Receivables receivables={receivables} toggleStatus={toggleReceivableStatus} pendingTotal={pendingTotal} openModal={() => setIsReceivableModalOpen(true)} />}
+          {tab === 'overview' && <Overview income={income} expense={expense} pendingTotal={pendingTotal} setTab={setTab} setModalType={setModalType} categories={categoryItems} activeCategory={activeCategory} setActiveCategory={setActiveCategory} filtered={filtered} onDelete={deleteTransaction} onEdit={openEditTransaction} />}
+          {tab === 'transactions' && <Transactions categories={categoryItems} activeCategory={activeCategory} setActiveCategory={setActiveCategory} filtered={filtered} onDelete={deleteTransaction} onEdit={openEditTransaction} />}
+          {tab === 'receivables' && <Receivables receivables={receivables} toggleStatus={toggleReceivableStatus} pendingTotal={pendingTotal} openModal={() => setIsReceivableModalOpen(true)} onEdit={openEditReceivable} onDelete={deleteReceivable} />}
           {tab === 'reports' && <Reports transactions={transactions} vehicleFilter={vehicleFilter} income={income} expense={expense} />}
           {tab === 'vehicles' && <Vehicles vehicles={vehicles} onDeleteVehicle={deleteVehicle} openModal={() => setIsVehicleModalOpen(true)} />}
         </section>
@@ -340,9 +378,9 @@ export default function Page() {
         ))}
       </nav>
 
-      {modalType && <Modal type={modalType} amount={amount} setAmount={setAmount} category={category} setCategory={setCategory} note={note} setNote={setNote} liters={liters} setLiters={setLiters} km={km} setKm={setKm} onSubmit={addTransaction} close={() => setModalType(null)} />}
+      {(modalType || editingTransaction) && <Modal type={modalType || editingTransaction?.type || 'income'} isEditing={!!editingTransaction} amount={amount} setAmount={setAmount} category={category} setCategory={setCategory} note={note} setNote={setNote} liters={liters} setLiters={setLiters} km={km} setKm={setKm} onSubmit={handleTransactionSubmit} close={closeTransactionModal} />}
       {isVehicleModalOpen && <VehicleModal onSubmit={addVehicle} close={() => setIsVehicleModalOpen(false)} newPlate={newPlate} setNewPlate={setNewPlate} />}
-      {isReceivableModalOpen && <ReceivableModal onSubmit={addReceivable} close={() => setIsReceivableModalOpen(false)} clientName={clientName} setClientName={setClientName} routeDesc={routeDesc} setRouteDesc={setRouteDesc} recAmount={recAmount} setRecAmount={setRecAmount} dueDate={dueDate} setDueDate={setDueDate} />}
+      {isReceivableModalOpen && <ReceivableModal isEditing={!!editingReceivable} onSubmit={handleReceivableSubmit} close={closeReceivableModal} clientName={clientName} setClientName={setClientName} routeDesc={routeDesc} setRouteDesc={setRouteDesc} recAmount={recAmount} setRecAmount={setRecAmount} dueDate={dueDate} setDueDate={setDueDate} />}
     </main>
   )
 }
@@ -360,15 +398,49 @@ function NavButton({ active, onClick, icon: Icon, children }: { active: boolean;
   return <button onClick={onClick} className={`flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-xs font-extrabold transition-all cursor-pointer ${active ? 'bg-[#eef3f7] text-[#122c4a]' : 'text-[#8391a0] hover:bg-[#f5f7fa] hover:text-[#122c4a]'}`}><Icon className="size-[18px]" />{children}</button> 
 }
 
-function SummaryCard({ label, value, icon: Icon, highlighted, expense }: { label: string; value: number; icon: typeof CircleDollarSign; highlighted?: boolean; expense?: boolean }) { 
-  return <article className={`rounded-2xl border p-5 shadow-sm transition-all ${highlighted ? 'border-[#122c4a] bg-[#122c4a] text-white' : 'border-[#e5eaf0] bg-white'}`}><div className="flex items-start justify-between"><div><p className={`text-xs font-extrabold uppercase tracking-wider ${highlighted ? 'text-white/70' : 'text-[#8391a0]'}`}>{label}</p><p className="mt-2 text-2xl font-black sm:text-3xl">₺{currency(value)}</p></div><div className={`flex size-10 items-center justify-center rounded-xl ${highlighted ? 'bg-white/10 text-[#ff9b83]' : expense ? 'bg-[#eef3f7] text-[#122c4a]' : 'bg-[#fff0ed] text-[#d64526]'}`}><Icon className="size-5" /></div></div></article> 
+// Renklendirilmiş Özet Kartları
+function SummaryCard({ label, value, icon: Icon, type }: { label: string; value: number; icon: typeof CircleDollarSign; type: 'profit' | 'income' | 'expense' }) { 
+  const isProfit = type === 'profit'
+  const isIncome = type === 'income'
+
+  return (
+    <article className={`rounded-2xl border p-5 shadow-sm transition-all ${isProfit ? 'border-[#122c4a] bg-[#122c4a] text-white' : 'border-[#e5eaf0] bg-white'}`}>
+      <div className="flex items-start justify-between">
+        <div>
+          <p className={`text-xs font-extrabold uppercase tracking-wider ${isProfit ? 'text-white/70' : 'text-[#8391a0]'}`}>{label}</p>
+          <p className={`mt-2 text-2xl font-black sm:text-3xl ${isProfit ? 'text-white' : isIncome ? 'text-emerald-600' : 'text-rose-600'}`}>
+            ₺{currency(value)}
+          </p>
+        </div>
+        <div className={`flex size-10 items-center justify-center rounded-xl ${isProfit ? 'bg-white/10 text-emerald-400' : isIncome ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+          <Icon className="size-5" />
+        </div>
+      </div>
+    </article> 
+  )
 }
 
-function Overview({ income, expense, pendingTotal, setTab, setModalType, categories, activeCategory, setActiveCategory, filtered, onDelete }: any) { 
-  return <><div className="grid gap-4 sm:grid-cols-3"><SummaryCard label="Net Kâr" value={income - expense} highlighted icon={CircleDollarSign} /><SummaryCard label="Toplam Gelir" value={income} icon={ArrowDownLeft} /><SummaryCard label="Toplam Gider" value={expense} icon={ArrowUpRight} expense /></div><div className="mt-5 grid gap-4 sm:grid-cols-3"><button onClick={() => setModalType('income')} className="flex h-13 items-center justify-center gap-2.5 rounded-2xl bg-[#d64526] px-5 text-xs font-black text-white shadow-md shadow-[#d64526]/20 hover:bg-[#be3a1f] transition-all cursor-pointer"><Plus className="size-4" /> Gelir Ekle</button><button onClick={() => setModalType('expense')} className="flex h-13 items-center justify-center gap-2.5 rounded-2xl bg-[#122c4a] px-5 text-xs font-black text-white shadow-md hover:bg-[#0d223a] transition-all cursor-pointer"><Plus className="size-4" /> Gider Ekle</button><button onClick={() => setTab('receivables')} className="flex h-13 items-center justify-center gap-2.5 rounded-2xl border border-[#e5eaf0] bg-white px-5 text-xs font-black text-[#122c4a] shadow-sm hover:bg-[#f8fafb] transition-all cursor-pointer"><WalletCards className="size-4 text-[#d64526]" /> ₺{currency(pendingTotal)} Alacak</button></div><Transactions categories={categories} activeCategory={activeCategory} setActiveCategory={setActiveCategory} filtered={filtered} onDelete={onDelete} compact /></> 
+function Overview({ income, expense, pendingTotal, setTab, setModalType, categories, activeCategory, setActiveCategory, filtered, onDelete, onEdit }: any) { 
+  return (
+    <>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <SummaryCard label="Net Kâr" value={income - expense} type="profit" icon={CircleDollarSign} />
+        <SummaryCard label="Toplam Gelir" value={income} type="income" icon={ArrowDownLeft} />
+        <SummaryCard label="Toplam Gider" value={expense} type="expense" icon={ArrowUpRight} />
+      </div>
+
+      <div className="mt-5 grid gap-4 sm:grid-cols-3">
+        <button onClick={() => setModalType('income')} className="flex h-13 items-center justify-center gap-2.5 rounded-2xl bg-[#d64526] px-5 text-xs font-black text-white shadow-md shadow-[#d64526]/20 hover:bg-[#be3a1f] transition-all cursor-pointer"><Plus className="size-4" /> Gelir Ekle</button>
+        <button onClick={() => setModalType('expense')} className="flex h-13 items-center justify-center gap-2.5 rounded-2xl bg-[#122c4a] px-5 text-xs font-black text-white shadow-md hover:bg-[#0d223a] transition-all cursor-pointer"><Plus className="size-4" /> Gider Ekle</button>
+        <button onClick={() => setTab('receivables')} className="flex h-13 items-center justify-center gap-2.5 rounded-2xl border border-[#e5eaf0] bg-white px-5 text-xs font-black text-[#122c4a] shadow-sm hover:bg-[#f8fafb] transition-all cursor-pointer"><WalletCards className="size-4 text-[#d64526]" /> ₺{currency(pendingTotal)} Alacak</button>
+      </div>
+
+      <Transactions categories={categories} activeCategory={activeCategory} setActiveCategory={setActiveCategory} filtered={filtered} onDelete={onDelete} onEdit={onEdit} compact />
+    </>
+  )
 }
 
-function Transactions({ categories, activeCategory, setActiveCategory, filtered, onDelete, compact = false }: any) { 
+function Transactions({ categories, activeCategory, setActiveCategory, filtered, onDelete, onEdit, compact = false }: any) { 
   return (
     <section className={`${compact ? 'mt-7' : 'mt-2'} rounded-2xl border border-[#e5eaf0] bg-white p-5 shadow-sm sm:p-6`}>
       <div className="flex items-center justify-between">
@@ -407,11 +479,14 @@ function Transactions({ categories, activeCategory, setActiveCategory, filtered,
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 shrink-0">
+                <div className="flex items-center gap-2 shrink-0">
                   <p className={`text-xs font-black sm:text-sm ${item.type === 'income' ? 'text-[#d64526]' : 'text-[#122c4a]'}`}>
                     {item.type === 'income' ? '+' : '-'}₺{currency(item.amount)}
                   </p>
-                  <button onClick={() => onDelete(item.id)} className="rounded-lg p-1.5 text-[#a0aec0] opacity-0 group-hover:opacity-100 hover:bg-red-50 hover:text-red-600 transition-all cursor-pointer" title="Sil">
+                  <button onClick={() => onEdit(item)} className="rounded-lg p-1.5 text-[#a0aec0] hover:bg-blue-50 hover:text-blue-600 transition-all cursor-pointer" title="Düzenle">
+                    <Pencil className="size-3.5" />
+                  </button>
+                  <button onClick={() => onDelete(item.id)} className="rounded-lg p-1.5 text-[#a0aec0] hover:bg-red-50 hover:text-red-600 transition-all cursor-pointer" title="Sil">
                     <Trash2 className="size-3.5" />
                   </button>
                 </div>
@@ -424,7 +499,7 @@ function Transactions({ categories, activeCategory, setActiveCategory, filtered,
   )
 }
 
-function Receivables({ receivables, toggleStatus, pendingTotal, openModal }: any) { 
+function Receivables({ receivables, toggleStatus, pendingTotal, openModal, onEdit, onDelete }: any) { 
   const [filter, setFilter] = useState<'Tümü' | 'Bekliyor' | 'Ödendi'>('Tümü')
   const filteredRecs = receivables.filter((r: Receivable) => filter === 'Tümü' || r.status === filter)
 
@@ -467,10 +542,18 @@ function Receivables({ receivables, toggleStatus, pendingTotal, openModal }: any
                 </div>
               </div>
 
-              <div className="text-right shrink-0">
-                <p className="text-xs font-black sm:text-sm">₺{currency(item.amount)}</p>
-                <button onClick={() => toggleStatus(item)} className={`mt-1 rounded-full px-3 py-0.5 text-[10px] font-black transition-all cursor-pointer ${item.status === 'Bekliyor' ? 'bg-[#fff0ed] text-[#d64526] hover:bg-[#fddbd3]' : 'bg-[#eaf7ef] text-[#2c8750] hover:bg-[#d5f0e0]'}`}>
-                  {item.status}
+              <div className="flex items-center gap-3 shrink-0">
+                <div className="text-right">
+                  <p className="text-xs font-black sm:text-sm">₺{currency(item.amount)}</p>
+                  <button onClick={() => toggleStatus(item)} className={`mt-1 rounded-full px-3 py-0.5 text-[10px] font-black transition-all cursor-pointer ${item.status === 'Bekliyor' ? 'bg-[#fff0ed] text-[#d64526] hover:bg-[#fddbd3]' : 'bg-[#eaf7ef] text-[#2c8750] hover:bg-[#d5f0e0]'}`}>
+                    {item.status}
+                  </button>
+                </div>
+                <button onClick={() => onEdit(item)} className="rounded-lg p-1.5 text-[#a0aec0] hover:bg-blue-50 hover:text-blue-600 transition-all cursor-pointer" title="Düzenle">
+                  <Pencil className="size-3.5" />
+                </button>
+                <button onClick={() => onDelete(item.id)} className="rounded-lg p-1.5 text-[#a0aec0] hover:bg-red-50 hover:text-red-600 transition-all cursor-pointer" title="Sil">
+                  <Trash2 className="size-3.5" />
                 </button>
               </div>
             </div>
@@ -506,9 +589,9 @@ function Reports({ transactions, vehicleFilter, income, expense }: { transaction
         <article className="rounded-2xl border border-[#e5eaf0] bg-white p-5 shadow-sm">
           <h3 className="text-sm font-black text-[#122c4a]">Özet Bilanço ({vehicleFilter})</h3>
           <div className="mt-4 space-y-3 text-xs font-bold">
-            <div className="flex justify-between border-b border-[#f0f3f6] pb-2"><span>Toplam Gelir</span><span className="font-black text-[#d64526]">₺{currency(income)}</span></div>
-            <div className="flex justify-between border-b border-[#f0f3f6] pb-2"><span>Toplam Gider</span><span className="font-black text-[#122c4a]">₺{currency(expense)}</span></div>
-            <div className="flex justify-between pt-1 text-sm font-black"><span>Net Kâr</span><span className={income - expense >= 0 ? 'text-green-600' : 'text-red-600'}>₺{currency(income - expense)}</span></div>
+            <div className="flex justify-between border-b border-[#f0f3f6] pb-2"><span>Toplam Gelir</span><span className="font-black text-emerald-600">₺{currency(income)}</span></div>
+            <div className="flex justify-between border-b border-[#f0f3f6] pb-2"><span>Toplam Gider</span><span className="font-black text-rose-600">₺{currency(expense)}</span></div>
+            <div className="flex justify-between pt-1 text-sm font-black"><span>Net Kâr</span><span className={income - expense >= 0 ? 'text-emerald-600' : 'text-rose-600'}>₺{currency(income - expense)}</span></div>
           </div>
         </article>
 
@@ -540,14 +623,14 @@ function Vehicles({ vehicles, onDeleteVehicle, openModal }: any) {
   return <section className="mt-2"><div className="flex items-end justify-between"><div><p className="text-[11px] font-extrabold uppercase tracking-wider text-[#d64526]">Plaka Yönetimi</p><h2 className="mt-0.5 text-xl font-black sm:text-2xl">Araçlar & Filo</h2></div><button onClick={openModal} className="flex items-center gap-2 rounded-xl bg-[#d64526] px-4 py-2.5 text-xs font-black text-white shadow-md hover:bg-[#be3a1f] transition-all cursor-pointer"><Plus className="size-4" /> Araç Ekle</button></div><div className="mt-5 grid gap-3 sm:grid-cols-3">{vehicles.length === 0 ? <p className="text-xs font-bold text-[#8391a0]">Henüz kayıtlı araç yok.</p> : vehicles.map((v: any) => <div key={v.id} className="group relative flex items-center justify-between rounded-2xl border border-[#e5eaf0] bg-white p-4 shadow-sm"><div><Truck className="size-5 text-[#d64526]" /><p className="mt-2.5 text-sm font-black">{v.plate_number}</p></div><button onClick={() => onDeleteVehicle(v.id)} className="rounded-lg p-2 text-[#8391a0] hover:bg-red-50 hover:text-red-600 transition-all cursor-pointer" title="Aracı Sil"><Trash2 className="size-4" /></button></div>)}</div></section> 
 }
 
-function Modal({ type, amount, setAmount, category, setCategory, note, setNote, liters, setLiters, km, setKm, onSubmit, close }: any) { 
+function Modal({ type, isEditing, amount, setAmount, category, setCategory, note, setNote, liters, setLiters, km, setKm, onSubmit, close }: any) { 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-[#122c4a]/45 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={(e) => { if (e.target === e.currentTarget) close() }}>
       <div className="w-full max-w-md rounded-t-3xl bg-white p-6 shadow-2xl sm:rounded-3xl">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-[11px] font-extrabold uppercase tracking-wider text-[#d64526]">Yeni Kayıt</p>
-            <h2 className="mt-0.5 text-lg font-black">{type === 'income' ? 'Gelir Ekle' : 'Gider Ekle'}</h2>
+            <p className="text-[11px] font-extrabold uppercase tracking-wider text-[#d64526]">{isEditing ? 'Düzenle' : 'Yeni Kayıt'}</p>
+            <h2 className="mt-0.5 text-lg font-black">{isEditing ? 'İşlemi Güncelle' : (type === 'income' ? 'Gelir Ekle' : 'Gider Ekle')}</h2>
           </div>
           <button onClick={close} className="rounded-full bg-[#f5f7fa] p-2 text-[#8391a0] hover:bg-[#eef3f7] transition-all cursor-pointer"><X className="size-4" /></button>
         </div>
@@ -607,7 +690,9 @@ function Modal({ type, amount, setAmount, category, setCategory, note, setNote, 
             <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="İstasyon veya rota" className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-xs font-extrabold outline-none focus:border-[#d64526] focus:bg-white transition-all" />
           </label>
 
-          <button type="submit" className="mt-2 h-11 rounded-xl bg-[#d64526] text-xs font-black text-white shadow-md hover:bg-[#be3a1f] transition-all cursor-pointer">Kaydet</button>
+          <button type="submit" className="mt-2 h-11 rounded-xl bg-[#d64526] text-xs font-black text-white shadow-md hover:bg-[#be3a1f] transition-all cursor-pointer">
+            {isEditing ? 'Değişiklikleri Kaydet' : 'Kaydet'}
+          </button>
         </form>
       </div>
     </div>
@@ -618,12 +703,12 @@ function VehicleModal({ onSubmit, close, newPlate, setNewPlate }: any) {
   return <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#122c4a]/45 p-4 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) close() }}><div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl"><div className="flex justify-between items-center"><h2 className="text-base font-black">Yeni Araç Ekle</h2><button onClick={close} className="p-1.5 text-[#8391a0] hover:bg-[#f5f7fa] rounded-full transition-all"><X className="size-4" /></button></div><form onSubmit={onSubmit} className="mt-4 flex flex-col gap-3"><input required value={newPlate} onChange={(e) => setNewPlate(e.target.value)} placeholder="Örn: 34 ABC 123" className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-xs font-extrabold outline-none uppercase focus:border-[#122c4a]" /><button type="submit" className="h-11 rounded-xl bg-[#122c4a] text-xs font-black text-white shadow-md">Plakayı Kaydet</button></form></div></div>
 }
 
-function ReceivableModal({ onSubmit, close, clientName, setClientName, routeDesc, setRouteDesc, recAmount, setRecAmount, dueDate, setDueDate }: any) {
+function ReceivableModal({ isEditing, onSubmit, close, clientName, setClientName, routeDesc, setRouteDesc, recAmount, setRecAmount, dueDate, setDueDate }: any) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#122c4a]/45 p-4 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) close() }}>
       <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
         <div className="flex justify-between items-center">
-          <h2 className="text-base font-black">Yeni Alacak Ekle</h2>
+          <h2 className="text-base font-black">{isEditing ? 'Alacağı Düzenle' : 'Yeni Alacak Ekle'}</h2>
           <button onClick={close} className="p-1.5 text-[#8391a0] hover:bg-[#f5f7fa] rounded-full transition-all"><X className="size-4" /></button>
         </div>
         <form onSubmit={onSubmit} className="mt-4 flex flex-col gap-3">
@@ -638,7 +723,9 @@ function ReceivableModal({ onSubmit, close, clientName, setClientName, routeDesc
             className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-xs font-extrabold outline-none focus:border-[#d64526]" 
           />
           <input value={dueDate} onChange={(e) => setDueDate(e.target.value)} placeholder="Vade Tarihi (Örn: 2026-10-10)" className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-xs font-extrabold outline-none focus:border-[#d64526]" />
-          <button type="submit" className="h-11 rounded-xl bg-[#d64526] text-xs font-black text-white shadow-md hover:bg-[#be3a1f] transition-all">Alacağı Kaydet</button>
+          <button type="submit" className="h-11 rounded-xl bg-[#d64526] text-xs font-black text-white shadow-md hover:bg-[#be3a1f] transition-all">
+            {isEditing ? 'Değişiklikleri Kaydet' : 'Alacağı Kaydet'}
+          </button>
         </form>
       </div>
     </div>
