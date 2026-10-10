@@ -1,7 +1,0 @@
-node_modules/
-.cache/
-.wwebjs_auth/
-.wwebjs_cache/
-whatsapp-session/
-.vs/
-.env
