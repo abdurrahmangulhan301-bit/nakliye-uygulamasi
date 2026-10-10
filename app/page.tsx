@@ -11,7 +11,7 @@ import {
 
 type Tab = 'overview' | 'transactions' | 'receivables' | 'reports' | 'vehicles'
 type Transaction = { id: string; type: 'income' | 'expense'; category: string; title: string; detail: string; amount: number; vehicle: string; liters?: number; km?: number; created_at?: string; icon: typeof Fuel }
-type Receivable = { id: string; client: string; route: string; due: string; amount: number; status: 'Bekliyor' | 'Ödendi' }
+type Receivable = { id: string; client: string; route: string; due: string; amount: number; phone?: string; status: 'Bekliyor' | 'Ödendi' }
 type Profile = { full_name: string; phone: string }
 type Vehicle = { id: string; plate_number: string }
 
@@ -86,6 +86,7 @@ export default function Page() {
   const [routeDesc, setRouteDesc] = useState('')
   const [recAmount, setRecAmount] = useState('')
   const [dueDate, setDueDate] = useState('')
+  const [clientPhone, setClientPhone] = useState('')
 
   useEffect(() => {
     async function loadData() {
@@ -125,12 +126,10 @@ export default function Page() {
 
   const vehiclePlates = useMemo(() => vehicles.map((v) => v.plate_number), [vehicles])
 
-  // Zaman Filtreleme Mantığı
   const timeFilteredTransactions = useMemo(() => {
     const now = new Date()
     return transactions.filter(item => {
       if (vehicleFilter !== 'Tüm araçlar' && item.vehicle !== vehicleFilter) return false
-      
       if (timeFilter === 'all') return true
 
       const itemDate = item.created_at ? new Date(item.created_at) : new Date()
@@ -229,6 +228,7 @@ export default function Page() {
       route: titleCase(routeDesc) || 'Nakliye Rotası',
       due: dueDate || null,
       amount: parsed,
+      phone: clientPhone.trim() || null,
       status: editingReceivable ? editingReceivable.status : 'Bekliyor'
     }
 
@@ -247,25 +247,39 @@ export default function Page() {
     closeReceivableModal()
   }
 
-  function openEditReceivable(rec: Receivable) {
+  function openEditReceivable(rec: Receivable & { phone?: string }) {
     setEditingReceivable(rec)
     setClientName(rec.client)
     setRouteDesc(rec.route)
     setRecAmount(currency(rec.amount))
     setDueDate(rec.due || '')
+    setClientPhone(rec.phone || '')
     setIsReceivableModalOpen(true)
   }
 
   function closeReceivableModal() {
     setIsReceivableModalOpen(false)
     setEditingReceivable(null)
-    setClientName(''); setRouteDesc(''); setRecAmount(''); setDueDate('')
+    setClientName(''); setRouteDesc(''); setRecAmount(''); setDueDate(''); setClientPhone('')
   }
 
   async function deleteReceivable(id: string) {
     if (!confirm('Bu alacağı silmek istediğinize emin misiniz?')) return
+    const recToDelete = receivables.find(r => r.id === id)
+
     setReceivables(curr => curr.filter(r => r.id !== id))
     await supabase.from('receivables').delete().eq('id', id)
+
+    if (recToDelete && recToDelete.status === 'Ödendi' && userId) {
+      await supabase.from('transactions')
+        .delete()
+        .eq('user_id', userId)
+        .eq('type', 'income')
+        .eq('amount', recToDelete.amount)
+        .ilike('title', `%${recToDelete.client}%`)
+
+      setTransactions(curr => curr.filter(t => !(t.type === 'income' && t.amount === recToDelete.amount && t.title.includes(recToDelete.client))))
+    }
   }
 
   async function toggleReceivableStatus(item: Receivable) {
@@ -290,6 +304,15 @@ export default function Page() {
       if (!txError && newTx) {
         setTransactions((curr) => [{ ...newTx, vehicle: selectedVehicleObj?.plate_number || '42DLB59', icon: Truck }, ...curr])
       }
+    } else if (nextStatus === 'Bekliyor' && userId) {
+      await supabase.from('transactions')
+        .delete()
+        .eq('user_id', userId)
+        .eq('type', 'income')
+        .eq('amount', item.amount)
+        .ilike('title', `%${item.client}%`)
+
+      setTransactions((curr) => curr.filter(t => !(t.type === 'income' && t.amount === item.amount && t.title.includes(item.client))))
     }
   }
 
@@ -368,7 +391,6 @@ export default function Page() {
               <h1 className="mt-0.5 text-2xl font-black tracking-tight sm:text-3xl">Günaydın, {firstName}</h1>
             </div>
             <div className="flex flex-wrap items-center gap-2.5">
-              {/* Dönem Filtresi */}
               <div className="flex rounded-xl border border-[#e5eaf0] bg-white p-1 shadow-sm">
                 {(['this_month', 'last_month', 'all'] as const).map((f) => (
                   <button key={f} onClick={() => setTimeFilter(f)} className={`rounded-lg px-3 py-1.5 text-xs font-black transition-all cursor-pointer ${timeFilter === f ? 'bg-[#122c4a] text-white shadow-sm' : 'text-[#8391a0] hover:text-[#122c4a]'}`}>
@@ -407,7 +429,7 @@ export default function Page() {
 
       {(modalType || editingTransaction) && <Modal type={modalType || editingTransaction?.type || 'income'} isEditing={!!editingTransaction} amount={amount} setAmount={setAmount} category={category} setCategory={setCategory} note={note} setNote={setNote} liters={liters} setLiters={setLiters} km={km} setKm={setKm} onSubmit={handleTransactionSubmit} close={closeTransactionModal} />}
       {isVehicleModalOpen && <VehicleModal onSubmit={addVehicle} close={() => setIsVehicleModalOpen(false)} newPlate={newPlate} setNewPlate={setNewPlate} />}
-      {isReceivableModalOpen && <ReceivableModal isEditing={!!editingReceivable} onSubmit={handleReceivableSubmit} close={closeReceivableModal} clientName={clientName} setClientName={setClientName} routeDesc={routeDesc} setRouteDesc={setRouteDesc} recAmount={recAmount} setRecAmount={setRecAmount} dueDate={dueDate} setDueDate={setDueDate} />}
+      {isReceivableModalOpen && <ReceivableModal isEditing={!!editingReceivable} onSubmit={handleReceivableSubmit} close={closeReceivableModal} clientName={clientName} setClientName={setClientName} routeDesc={routeDesc} setRouteDesc={setRouteDesc} recAmount={recAmount} setRecAmount={setRecAmount} dueDate={dueDate} setDueDate={setDueDate} clientPhone={clientPhone} setClientPhone={setClientPhone} />}
     </main>
   )
 }
@@ -530,9 +552,10 @@ function Receivables({ receivables, toggleStatus, pendingTotal, openModal, onEdi
   const [filter, setFilter] = useState<'Tümü' | 'Bekliyor' | 'Ödendi'>('Tümü')
   const filteredRecs = receivables.filter((r: Receivable) => filter === 'Tümü' || r.status === filter)
 
-  const sendWhatsAppMsg = (item: Receivable) => {
-    const text = `Merhaba ${titleCase(item.client)}, Nakliye Cepte üzerindeki ${titleCase(item.route)} rotası için ₺${currency(item.amount)} tutarındaki alacak bakiyenizi hatırlatmak isteriz.`
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank')
+  const sendWhatsAppMsg = (item: Receivable & { phone?: string }) => {
+    const text = `Sayın ${titleCase(item.client)}, ${titleCase(item.route)} rotasına ait ₺${currency(item.amount)} tutarındaki tahsilat bakiyenizin ödemesini hatırlatmak isteriz. İyi çalışmalar dileriz.`
+    const cleanPhone = item.phone ? item.phone.replace(/\D/g, '') : ''
+    window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`, '_blank')
   }
 
   return (
@@ -562,7 +585,7 @@ function Receivables({ receivables, toggleStatus, pendingTotal, openModal, onEdi
         {filteredRecs.length === 0 ? (
           <p className="py-8 text-center text-xs font-bold text-[#8391a0]">Kayıtlı alacak bulunmuyor.</p>
         ) : (
-          filteredRecs.map((item: Receivable) => (
+          filteredRecs.map((item: Receivable & { phone?: string }) => (
             <div key={item.id} className="flex items-center justify-between gap-4 border-b border-[#f0f3f6] py-4 last:border-0">
               <div className="flex items-center gap-3.5 min-w-0">
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#eef3f7] text-[#122c4a]">
@@ -570,7 +593,7 @@ function Receivables({ receivables, toggleStatus, pendingTotal, openModal, onEdi
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-black text-[#122c4a] sm:text-sm">{titleCase(item.client)}</p>
-                  <p className="mt-0.5 truncate text-[11px] font-semibold text-[#8391a0]">{titleCase(item.route)} · Vade: {titleCase(item.due) || 'Belirtilmedi'}</p>
+                  <p className="mt-0.5 truncate text-[11px] font-semibold text-[#8391a0]">{titleCase(item.route)} {item.phone ? `· 📞 ${item.phone}` : ''} · Vade: {titleCase(item.due) || 'Belirtilmedi'}</p>
                 </div>
               </div>
 
@@ -602,7 +625,6 @@ function Receivables({ receivables, toggleStatus, pendingTotal, openModal, onEdi
 }
 
 function Reports({ transactions, vehicleFilter, income, expense }: { transactions: Transaction[]; vehicleFilter: string; income: number; expense: number }) { 
-  // Yakıt analizi hesabı
   const fuelStats = useMemo(() => {
     let totalLiters = 0
     let totalKm = 0
@@ -636,7 +658,6 @@ function Reports({ transactions, vehicleFilter, income, expense }: { transaction
         <button onClick={() => window.print()} className="flex items-center gap-2 rounded-xl border border-[#e5eaf0] bg-white px-4 py-2.5 text-xs font-black shadow-sm hover:bg-[#f8fafb] transition-all cursor-pointer"><Download className="size-4" /> Raporu İndir</button>
       </div>
 
-      {/* Yakıt Performans Kartı */}
       <div className="mt-5 rounded-2xl bg-gradient-to-r from-[#122c4a] to-[#1e3a5f] p-5 text-white shadow-sm">
         <div className="flex items-center justify-between">
           <div>
@@ -768,7 +789,7 @@ function VehicleModal({ onSubmit, close, newPlate, setNewPlate }: any) {
   return <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#122c4a]/45 p-4 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) close() }}><div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl"><div className="flex justify-between items-center"><h2 className="text-base font-black">Yeni Araç Ekle</h2><button onClick={close} className="p-1.5 text-[#8391a0] hover:bg-[#f5f7fa] rounded-full transition-all"><X className="size-4" /></button></div><form onSubmit={onSubmit} className="mt-4 flex flex-col gap-3"><input required value={newPlate} onChange={(e) => setNewPlate(e.target.value)} placeholder="Örn: 34 ABC 123" className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-xs font-extrabold outline-none uppercase focus:border-[#122c4a]" /><button type="submit" className="h-11 rounded-xl bg-[#122c4a] text-xs font-black text-white shadow-md">Plakayı Kaydet</button></form></div></div>
 }
 
-function ReceivableModal({ isEditing, onSubmit, close, clientName, setClientName, routeDesc, setRouteDesc, recAmount, setRecAmount, dueDate, setDueDate }: any) {
+function ReceivableModal({ isEditing, onSubmit, close, clientName, setClientName, routeDesc, setRouteDesc, recAmount, setRecAmount, dueDate, setDueDate, clientPhone, setClientPhone }: any) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#122c4a]/45 p-4 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) close() }}>
       <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
@@ -787,6 +808,7 @@ function ReceivableModal({ isEditing, onSubmit, close, clientName, setClientName
             placeholder="Tutar (₺)" 
             className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-xs font-extrabold outline-none focus:border-[#d64526]" 
           />
+          <input value={clientPhone} onChange={(e) => setClientPhone(e.target.value)} placeholder="Telefon Numarası (Örn: 5551234567)" className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-xs font-extrabold outline-none focus:border-[#d64526]" />
           <input value={dueDate} onChange={(e) => setDueDate(e.target.value)} placeholder="Vade Tarihi (Örn: 2026-10-10)" className="h-11 rounded-xl border border-[#dfe6ed] bg-[#f8fafb] px-4 text-xs font-extrabold outline-none focus:border-[#d64526]" />
           <button type="submit" className="h-11 rounded-xl bg-[#d64526] text-xs font-black text-white shadow-md hover:bg-[#be3a1f] transition-all">
             {isEditing ? 'Değişiklikleri Kaydet' : 'Alacağı Kaydet'}
