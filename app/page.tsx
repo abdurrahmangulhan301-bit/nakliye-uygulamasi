@@ -6,11 +6,11 @@ import { useRouter } from 'next/navigation'
 import {
   ArrowDownLeft, ArrowUpRight, BarChart3, ChevronDown, CircleDollarSign,
   ClipboardList, Fuel, LayoutDashboard, Plus, Receipt, Route,
-  ShipWheel, Trash2, Truck, Utensils, Wrench, X, Gauge, WalletCards, Download, LogOut, Pencil, MessageSquare
+  ShipWheel, Trash2, Truck, Utensils, Wrench, X, Gauge, WalletCards, Download, LogOut, Pencil, MessageSquare, Calendar
 } from 'lucide-react'
 
 type Tab = 'overview' | 'transactions' | 'receivables' | 'reports' | 'vehicles'
-type Transaction = { id: string; type: 'income' | 'expense'; category: string; title: string; detail: string; amount: number; vehicle: string; liters?: number; km?: number; icon: typeof Fuel }
+type Transaction = { id: string; type: 'income' | 'expense'; category: string; title: string; detail: string; amount: number; vehicle: string; liters?: number; km?: number; created_at?: string; icon: typeof Fuel }
 type Receivable = { id: string; client: string; route: string; due: string; amount: number; status: 'Bekliyor' | 'Ödendi' }
 type Profile = { full_name: string; phone: string }
 type Vehicle = { id: string; plate_number: string }
@@ -65,6 +65,7 @@ export default function Page() {
   const [tab, setTab] = useState<Tab>('overview')
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [vehicleFilter, setVehicleFilter] = useState('Tüm araçlar')
+  const [timeFilter, setTimeFilter] = useState<'all' | 'this_month' | 'last_month'>('this_month')
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [receivables, setReceivables] = useState<Receivable[]>([])
   const [activeCategory, setActiveCategory] = useState('Tümü')
@@ -124,9 +125,32 @@ export default function Page() {
 
   const vehiclePlates = useMemo(() => vehicles.map((v) => v.plate_number), [vehicles])
 
-  const filtered = useMemo(() => transactions.filter((item) => (vehicleFilter === 'Tüm araçlar' || item.vehicle === vehicleFilter) && (activeCategory === 'Tümü' || item.category === activeCategory)), [transactions, vehicleFilter, activeCategory])
-  const income = useMemo(() => transactions.filter((item) => item.type === 'income' && (vehicleFilter === 'Tüm araçlar' || item.vehicle === vehicleFilter)).reduce((sum, item) => sum + item.amount, 0), [transactions, vehicleFilter])
-  const expense = useMemo(() => transactions.filter((item) => item.type === 'expense' && (vehicleFilter === 'Tüm araçlar' || item.vehicle === vehicleFilter)).reduce((sum, item) => sum + item.amount, 0), [transactions, vehicleFilter])
+  // Zaman Filtreleme Mantığı
+  const timeFilteredTransactions = useMemo(() => {
+    const now = new Date()
+    return transactions.filter(item => {
+      if (vehicleFilter !== 'Tüm araçlar' && item.vehicle !== vehicleFilter) return false
+      
+      if (timeFilter === 'all') return true
+
+      const itemDate = item.created_at ? new Date(item.created_at) : new Date()
+      if (timeFilter === 'this_month') {
+        return itemDate.getMonth() === now.getMonth() && itemDate.getFullYear() === now.getFullYear()
+      }
+      if (timeFilter === 'last_month') {
+        const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+        return itemDate.getMonth() === lastMonth.getMonth() && itemDate.getFullYear() === lastMonth.getFullYear()
+      }
+      return true
+    })
+  }, [transactions, vehicleFilter, timeFilter])
+
+  const filtered = useMemo(() => {
+    return timeFilteredTransactions.filter(item => activeCategory === 'Tümü' || item.category === activeCategory)
+  }, [timeFilteredTransactions, activeCategory])
+
+  const income = useMemo(() => timeFilteredTransactions.filter((item) => item.type === 'income').reduce((sum, item) => sum + item.amount, 0), [timeFilteredTransactions])
+  const expense = useMemo(() => timeFilteredTransactions.filter((item) => item.type === 'expense').reduce((sum, item) => sum + item.amount, 0), [timeFilteredTransactions])
   const pendingTotal = receivables.filter((item) => item.status === 'Bekliyor').reduce((sum, item) => sum + Number(item.amount), 0)
 
   async function handleTransactionSubmit(e: React.FormEvent) {
@@ -338,13 +362,22 @@ export default function Page() {
         </aside>
 
         <section className="min-w-0 flex-1 px-4 pb-24 sm:px-7 lg:px-10 lg:pb-8">
-          <header className="flex items-center justify-between py-5 sm:py-7">
+          <header className="flex flex-col gap-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:py-7">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-wider text-[#8391a0]">Hoş Geldiniz</p>
               <h1 className="mt-0.5 text-2xl font-black tracking-tight sm:text-3xl">Günaydın, {firstName}</h1>
             </div>
-            <div className="flex items-center gap-3">
-              <label className="hidden items-center gap-2 rounded-xl border border-[#e5eaf0] bg-white px-3.5 py-2 text-xs font-bold shadow-sm sm:flex cursor-pointer">
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* Dönem Filtresi */}
+              <div className="flex rounded-xl border border-[#e5eaf0] bg-white p-1 shadow-sm">
+                {(['this_month', 'last_month', 'all'] as const).map((f) => (
+                  <button key={f} onClick={() => setTimeFilter(f)} className={`rounded-lg px-3 py-1.5 text-xs font-black transition-all cursor-pointer ${timeFilter === f ? 'bg-[#122c4a] text-white shadow-sm' : 'text-[#8391a0] hover:text-[#122c4a]'}`}>
+                    {f === 'this_month' ? 'Bu Ay' : f === 'last_month' ? 'Geçen Ay' : 'Tümü'}
+                  </button>
+                ))}
+              </div>
+
+              <label className="flex items-center gap-2 rounded-xl border border-[#e5eaf0] bg-white px-3.5 py-2 text-xs font-bold shadow-sm cursor-pointer">
                 <Truck className="size-4 text-[#d64526]" />
                 <select value={vehicleFilter} onChange={(e) => setVehicleFilter(e.target.value)} className="bg-transparent outline-none cursor-pointer font-bold">
                   <option>Tüm araçlar</option>
@@ -359,7 +392,7 @@ export default function Page() {
           {tab === 'overview' && <Overview income={income} expense={expense} pendingTotal={pendingTotal} setTab={setTab} setModalType={setModalType} categories={categoryItems} activeCategory={activeCategory} setActiveCategory={setActiveCategory} filtered={filtered} onDelete={deleteTransaction} onEdit={openEditTransaction} />}
           {tab === 'transactions' && <Transactions categories={categoryItems} activeCategory={activeCategory} setActiveCategory={setActiveCategory} filtered={filtered} onDelete={deleteTransaction} onEdit={openEditTransaction} />}
           {tab === 'receivables' && <Receivables receivables={receivables} toggleStatus={toggleReceivableStatus} pendingTotal={pendingTotal} openModal={() => setIsReceivableModalOpen(true)} onEdit={openEditReceivable} onDelete={deleteReceivable} />}
-          {tab === 'reports' && <Reports transactions={transactions} vehicleFilter={vehicleFilter} income={income} expense={expense} />}
+          {tab === 'reports' && <Reports transactions={timeFilteredTransactions} vehicleFilter={vehicleFilter} income={income} expense={expense} />}
           {tab === 'vehicles' && <Vehicles vehicles={vehicles} onDeleteVehicle={deleteVehicle} openModal={() => setIsVehicleModalOpen(true)} />}
         </section>
       </div>
@@ -392,7 +425,6 @@ function NavButton({ active, onClick, icon: Icon, children }: { active: boolean;
   return <button onClick={onClick} className={`flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-xs font-extrabold transition-all cursor-pointer ${active ? 'bg-[#eef3f7] text-[#122c4a]' : 'text-[#8391a0] hover:bg-[#f5f7fa] hover:text-[#122c4a]'}`}><Icon className="size-[18px]" />{children}</button> 
 }
 
-// Mükemmel Renk Uyumlu Özet Kartları
 function SummaryCard({ label, value, icon: Icon, type }: { label: string; value: number; icon: typeof CircleDollarSign; type: 'profit' | 'income' | 'expense' }) { 
   const isProfit = type === 'profit'
   const isIncome = type === 'income'
@@ -406,7 +438,7 @@ function SummaryCard({ label, value, icon: Icon, type }: { label: string; value:
             ₺{currency(value)}
           </p>
         </div>
-        <div className={`flex size-10 items-center justify-center rounded-xl ${isProfit ? 'bg-white/10 text-emerald-400' : isIncome ? 'bg-emerald-100/70 text-emerald-600' : 'bg-rose-100/70 text-rose-600'}`}>
+        <div className={`flex size-10 items-center justify-center rounded-xl ${isProfit ? 'bg-white/10 text-emerald-400' : isIncome ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
           <Icon className="size-5" />
         </div>
       </div>
@@ -499,7 +531,7 @@ function Receivables({ receivables, toggleStatus, pendingTotal, openModal, onEdi
   const filteredRecs = receivables.filter((r: Receivable) => filter === 'Tümü' || r.status === filter)
 
   const sendWhatsAppMsg = (item: Receivable) => {
-    const text = `Merhaba ${titleCase(item.client)}, Nakliye Cepte üzerindeki ${titleCase(item.route)} rotası için ₺${currency(item.amount)} tutarındaki ödemeyi hatırlatmak isteriz.`
+    const text = `Merhaba ${titleCase(item.client)}, Nakliye Cepte üzerindeki ${titleCase(item.route)} rotası için ₺${currency(item.amount)} tutarındaki alacak bakiyenizi hatırlatmak isteriz.`
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank')
   }
 
@@ -550,7 +582,7 @@ function Receivables({ receivables, toggleStatus, pendingTotal, openModal, onEdi
                   </button>
                 </div>
                 {item.status === 'Bekliyor' && (
-                  <button onClick={() => sendWhatsAppMsg(item)} className="rounded-lg p-1.5 text-emerald-600 hover:bg-emerald-50 transition-all cursor-pointer" title="WhatsApp Hatırlat">
+                  <button onClick={() => sendWhatsAppMsg(item)} className="rounded-lg p-1.5 text-emerald-600 hover:bg-emerald-50 transition-all cursor-pointer" title="WhatsApp ile Hatırlat">
                     <MessageSquare className="size-3.5" />
                   </button>
                 )}
@@ -570,6 +602,20 @@ function Receivables({ receivables, toggleStatus, pendingTotal, openModal, onEdi
 }
 
 function Reports({ transactions, vehicleFilter, income, expense }: { transactions: Transaction[]; vehicleFilter: string; income: number; expense: number }) { 
+  // Yakıt analizi hesabı
+  const fuelStats = useMemo(() => {
+    let totalLiters = 0
+    let totalKm = 0
+    transactions.forEach(t => {
+      if (t.category === 'Mazot') {
+        if (t.liters) totalLiters += Number(t.liters)
+        if (t.km) totalKm += Number(t.km)
+      }
+    })
+    const avgConsumption = totalKm > 0 && totalLiters > 0 ? ((totalLiters * 100) / totalKm).toFixed(1) : null
+    return { totalLiters, totalKm, avgConsumption }
+  }, [transactions])
+
   const expensesList = useMemo(() => transactions.filter(t => t.type === 'expense' && (vehicleFilter === 'Tüm araçlar' || t.vehicle === vehicleFilter)), [transactions, vehicleFilter])
   
   const categoryTotals = useMemo(() => {
@@ -585,9 +631,23 @@ function Reports({ transactions, vehicleFilter, income, expense }: { transaction
       <div className="flex items-end justify-between">
         <div>
           <p className="text-[11px] font-extrabold uppercase tracking-wider text-[#d64526]">Performans Özeti</p>
-          <h2 className="mt-0.5 text-xl font-black sm:text-2xl">Gelişmiş Raporlar</h2>
+          <h2 className="mt-0.5 text-xl font-black sm:text-2xl">Gelişmiş Raporlar & Yakıt Analizi</h2>
         </div>
         <button onClick={() => window.print()} className="flex items-center gap-2 rounded-xl border border-[#e5eaf0] bg-white px-4 py-2.5 text-xs font-black shadow-sm hover:bg-[#f8fafb] transition-all cursor-pointer"><Download className="size-4" /> Raporu İndir</button>
+      </div>
+
+      {/* Yakıt Performans Kartı */}
+      <div className="mt-5 rounded-2xl bg-gradient-to-r from-[#122c4a] to-[#1e3a5f] p-5 text-white shadow-sm">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs font-extrabold uppercase tracking-wider text-white/70">100 KM Ortalama Yakıt Tüketimi</p>
+            <p className="mt-1 text-3xl font-black">{fuelStats.avgConsumption ? `${fuelStats.avgConsumption} Litre / 100 KM` : 'Veri Girilmedi'}</p>
+            <p className="mt-1 text-[11px] text-white/60">Toplam Alınan Mazot: {fuelStats.totalLiters} Lt · Toplam KM: {fuelStats.totalKm} KM</p>
+          </div>
+          <div className="flex size-12 items-center justify-center rounded-2xl bg-white/10 text-emerald-400">
+            <Fuel className="size-6" />
+          </div>
+        </div>
       </div>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
